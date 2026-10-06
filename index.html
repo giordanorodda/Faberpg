@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Un piccolo mondo in cui abitare</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Crect width=%2716%27 height=%2716%27 fill=%27%233f6f8f%27/%3E%3Crect x=%277%27 y=%276%27 width=%272%27 height=%276%27 fill=%27%23e04030%27/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/src/ui/style.css" />
+  </head>
+  <body>
+    <div id="stage">
+      <canvas id="world"></canvas>
+      <div id="ui">
+        <div id="clock"></div>
+        <div id="speed"></div>
+        <div id="location"></div>
+        <div id="label"></div>
+        <div id="toasts"></div>
+        <div id="dialogue" hidden>
+          <div class="name"></div>
+          <div class="text"></div>
+          <div class="more">▾</div>
+        </div>
+        <div id="choice" hidden></div>
+        <div id="panel" hidden>
+          <h2></h2>
+          <div class="body"></div>
+          <div class="hint">Esc per chiudere</div>
+        </div>
+        <div id="fade"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
