@@ -8,6 +8,7 @@ import { wonkify } from '../bottega/style';
 import { apple, bentBox, bowl, broom, cup, garlicBraid, glass, herbBunch, jug, M, nail, organic, plankFloor, rbox, shadowed, toon, toonify, wallSkin } from '../stile/kit';
 import type { WallOptions } from '../stile/paint';
 import { flushBookAtlas, makeBook } from './books';
+import * as De from './details';
 import * as Fu from './furniture';
 
 /**
@@ -436,6 +437,7 @@ export function buildHouse(): House {
     const top = 0.98 + 0.12 + 0.07;
     const mx = -W / 2 + 0.66;
     const j = jug(51);
+    j.scale.setScalar(0.72);
     j.position.set(mx, top, -0.55);
     group.add(j);
     const c = cup(52);
@@ -447,14 +449,60 @@ export function buildHouse(): House {
     const tin2 = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.08, 20), toon({ color: 0xa8543a, rim: 0.6 }));
     tin2.position.set(mx + 0.03, top + 0.04, 0.53);
     group.add(movable(tag(shadowed(tin2), 'tè'), 'small'));
-    const sh = rbox(0.12, 0.16, 0.012, toon({ color: 0xd8cbb0, rim: 0.2 }), 0.004);
-    sh.position.set(mx - 0.07, top + 0.08, 0.1);
-    sh.rotation.set(0, Math.PI / 2, -0.08);
-    group.add(tag(shadowed(sh), 'ritratto'));
+    const lt = De.letters();
+    lt.position.set(mx - 0.06, top, 0.19);
+    group.add(tag(lt, 'lettere'));
+    const pr = De.framedPortrait();
+    pr.position.set(mx - 0.0, top + 0.105, 0.12);
+    pr.rotation.set(0, Math.PI / 2, 0);
+    pr.rotateX(-0.12);
+    group.add(tag(pr, 'ritratto'));
+    const hg = De.hourglass();
+    hg.position.set(mx + 0.02, top, -0.14);
+    group.add(movable(tag(hg, 'clessidra'), 'small'));
+    const pp = De.pipe();
+    pp.position.set(mx + 0.06, top, 0.27);
+    pp.rotation.y = 2.4;
+    group.add(movable(tag(pp, 'pipa'), 'small'));
+    const df = De.driedFlowers(3);
+    df.position.set(mx - 0.03, top, -0.76);
+    group.add(tag(df, 'lavanda'));
+    living.push(df);
     const ca = Fu.candle(71, 0.07);
     ca.group.position.set(mx, top, 0.0);
     group.add(ca.group);
     ca.flame.visible = false;
+  }
+  // around the fire: ash, scorch marks, the irons, the bellows, kindling, keys, the calendar
+  {
+    const hsX = -W / 2 + 0.85;
+    const a1 = De.ash(0.5, 1.4, 3);
+    a1.position.set(hsX, 0.062, 0);
+    group.add(a1);
+    const a2 = De.ash(0.7, 1.6, 4, true);
+    a2.position.set(hsX + 0.5, 0.004, 0.05);
+    group.add(a2);
+    const fi = De.fireIrons();
+    fi.position.set(-W / 2 + 0.75, 0, -0.98);
+    fi.rotation.y = 0.6;
+    group.add(movable(tag(fi, 'attizzatoio'), 'furniture', box(-W / 2 + 0.75, -0.98, 0.22, 0.22)));
+    const bl = De.bellows();
+    bl.position.set(-W / 2 + 0.62, 0.9, -0.62);
+    bl.rotation.set(0, Math.PI / 2, 0.06);
+    group.add(tag(bl, 'mantice'));
+    living.push(bl);
+    const kb = De.kindling();
+    kb.position.set(-W / 2 + 0.5, 0, 1.0);
+    group.add(movable(tag(kb, 'rametti'), 'furniture', box(-W / 2 + 0.5, 1.0, 0.42, 0.42)));
+    const ky = De.keys();
+    ky.position.set(-W / 2 + 0.62, 1.38, 0.64);
+    ky.rotation.y = Math.PI / 2;
+    group.add(tag(ky, 'chiavi'));
+    living.push(ky);
+    const cal = De.calendar();
+    cal.position.set(-W / 2 + 0.08, 1.75, -1.15);
+    cal.rotation.y = Math.PI / 2;
+    group.add(tag(cal, 'calendario'));
   }
   // logs by the fire
   {
@@ -495,12 +543,21 @@ export function buildHouse(): House {
     ca.group.position.set(-2.18, 0.618, 1.58);
     group.add(tag(ca.group, 'candela:poltrona'));
     lights.push({ at: ca.tip.clone().add(ca.group.position), level: 0, flames: [ca.flame], key: 'candela:poltrona', kind: 'candle' });
+    const dl = De.doily(0.17);
+    dl.position.set(-2.12, 0.62, 1.6);
+    group.add(dl);
+    const sc = De.saucer();
+    sc.position.set(-1.96, 0.618, 1.48);
+    group.add(sc);
+    const bs = De.biscuits();
+    bs.position.set(-1.92, 0.618, 1.78);
+    group.add(movable(tag(bs, 'biscotti'), 'small'));
     const ob = Fu.openBook(5);
     ob.position.set(-2.02, 0.618, 1.7);
     ob.rotation.y = 0.4;
     group.add(movable(tag(ob, 'libro'), 'small'));
     const tc = cup(73);
-    tc.position.set(-1.96, 0.618, 1.48);
+    tc.position.set(-1.96, 0.624, 1.48);
     const tea = new THREE.Mesh(new THREE.CircleGeometry(0.034, 16), toon({ color: 0x8a5a22, rim: 0.5 }));
     tea.rotation.x = -Math.PI / 2;
     tea.position.y = 0.058;

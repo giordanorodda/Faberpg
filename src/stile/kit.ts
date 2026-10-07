@@ -160,7 +160,7 @@ export function plankFloor(w: number, d: number, seed = 71): THREE.Group {
   while (x < w / 2) {
     const bw = Math.min(w / 2 - x, 0.22 + rnd() * 0.16);
     const tone = new THREE.Color(0xffffff).multiplyScalar(0.86 + rnd() * 0.22);
-    const tex = woodTex(seed + 9 + k, '#b9875a', '#7a4f30', { knots: 1 + Math.floor(rnd() * 3) });
+    const tex = woodTex(seed + 9 + k, '#b9875a', '#7a4f30', { knots: 1 + Math.floor(rnd() * 3), size: 512 });
     tex.center.set(0.5, 0.5);
     tex.rotation = Math.PI / 2;
     tex.repeat.set(d / 1.4, bw / 0.5);

@@ -15,7 +15,7 @@ page.on('console', (m) => {
 });
 // name, time of day, x, z, yaw, pitch, floor height ('sit' sits in the armchair)
 const UP = 2.68;
-const shots: [string, string, number | 'sit', number, number, number, number][] = [
+const shots: [string, string, number | 'sit' | 'read', number, number, number, number][] = [
   ['c1-mattina', 'mattina', 2.3, 2.0, 50, -10, 0],
   ['c2-camino', 'pomeriggio', 0.6, 1.6, 75, -8, 0],
   ['c3-notte', 'notte', 0.7, 1.9, 70, -12, 0],
@@ -25,6 +25,15 @@ const shots: [string, string, number | 'sit', number, number, number, number][] 
   ['c7-camera', 'mattina', 1.2, -0.3, 60, -14, UP],
   ['c8-camera-notte', 'notte', 1.0, 0.0, 65, -16, UP],
   ['c9-gatto', 'pomeriggio', -0.9, 0.6, 90, -40, UP],
+  ['d1-angolo', 'pomeriggio', -0.5, 2.0, 70, -10, 0],
+  ['d2-mensola', 'pomeriggio', -1.55, 0.0, 90, -16, 0],
+  ['d3-poltrona', 'pomeriggio', -2.25, 0.62, -115, -24, 0],
+  ['d4-tavolino', 'notte', -1.5, 1.95, 57, -42, 0],
+  ['d5-lettura', 'notte', 'read', 0, 0, 0, 0],
+  ['d6-lettura-giorno', 'pomeriggio', 'read', 1, 0, 0, 0],
+  ['d7-gatto', 'pomeriggio', -0.85, 1.65, 90, -58, UP],
+  ['d8-gatto-basso', 'pomeriggio', -0.85, 1.35, 100, -38, UP],
+  ['d9-gatto-vicino', 'pomeriggio', -1.05, 1.3, 125, -28, UP - 0.8],
   ['c10-libri', 'pomeriggio', -1.6, 1.75, 90, -14, 0],
 ];
 const only = process.env.SHOTS?.split(',');
@@ -37,8 +46,12 @@ for (const [name, ora, x, z, yaw, pitch, y] of shots) {
   await page.waitForTimeout(Number(process.env.SHOT_WAIT ?? 3000));
   await page.evaluate(
     ([x, z, yaw, pitch, y]) => {
-      const b = (window as unknown as { bottega: { view(...a: number[]): void; sit(): void } }).bottega;
+      const b = (window as unknown as { bottega: { view(...a: number[]): void; sit(): void; read(i: number): void } }).bottega;
       if (x === 'sit') b.sit();
+      else if (x === 'read') {
+        b.sit();
+        b.read(z as number);
+      }
       else b.view(x as number, z as number, yaw as number, pitch as number, y as number);
     },
     [x, z, yaw, pitch, y] as const,

@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { makeRng } from '../core/rng';
 import { bentBox, lathe, M, organic, rbox, shadowed, toon } from '../stile/kit';
 import { clothTex, woodTex } from '../stile/paint';
+import { MarchingCubes } from 'three/addons/objects/MarchingCubes.js';
 import { makeBook } from './books';
+import { soot } from './details';
 import { boxCollider, floorCollider, rollCollider, settle, type Collider } from '../stile/softbody';
 
 /**
@@ -105,6 +107,90 @@ export function candle(seed: number, height = 0.11): { group: THREE.Group; flame
 
 const bookMats = [0x7a2e2a, 0x2e4a6a, 0x4a5a32, 0x5a3a52].map((c) => toon({ color: c, rim: 0.25 }));
 const pages = toon({ color: 0xeee2c4, rim: 0.1 });
+/** A printed page: a running head, lines of type, a drop cap; sometimes a little woodcut of a plant. */
+function pageTex(seed: number, mirrored: boolean): THREE.CanvasTexture {
+  return canvasTex(256, 384, (g) => {
+    const rnd = makeRng(seed);
+    if (mirrored) {
+      g.translate(256, 0);
+      g.scale(-1, 1);
+    }
+    g.fillStyle = '#f2e8cc';
+    g.fillRect(0, 0, 256, 384);
+    // foxing and a little shadow towards the gutter
+    const grd = g.createLinearGradient(256, 0, 200, 0);
+    grd.addColorStop(0, 'rgba(120,90,50,0.25)');
+    grd.addColorStop(1, 'rgba(120,90,50,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 256, 384);
+    for (let i = 0; i < 6; i++) {
+      g.fillStyle = `rgba(160,110,60,${0.05 + rnd() * 0.08})`;
+      g.beginPath();
+      g.arc(rnd() * 256, rnd() * 384, 2 + rnd() * 6, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = '#2a2018';
+    g.font = 'italic 11px Georgia, serif';
+    g.textAlign = 'center';
+    g.fillText(rnd() < 0.5 ? 'Delle erbe del bosco' : 'Almanacco', 128, 26);
+    let y = 48;
+    const drawing = rnd() < 0.6;
+    if (drawing) {
+      // a plant: a stem, leaves in pairs, a flower
+      g.strokeStyle = '#2a2018';
+      g.lineWidth = 1.4;
+      g.beginPath();
+      g.moveTo(128, 190);
+      g.bezierCurveTo(124, 150, 134, 110, 128, 70);
+      g.stroke();
+      for (let k = 0; k < 4; k++) {
+        const ly = 170 - k * 26;
+        for (const sd of [-1, 1]) {
+          g.beginPath();
+          g.ellipse(128 + sd * 16, ly, 16, 6, sd * -0.5, 0, Math.PI * 2);
+          g.stroke();
+          g.beginPath();
+          g.moveTo(128, ly + 2);
+          g.lineTo(128 + sd * 28, ly - 6);
+          g.stroke();
+        }
+      }
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        g.beginPath();
+        g.ellipse(128 + Math.cos(a) * 9, 62 + Math.sin(a) * 9, 7, 4, a, 0, Math.PI * 2);
+        g.stroke();
+      }
+      g.font = 'italic 9px Georgia, serif';
+      g.fillText('Fig. ' + (1 + Math.floor(rnd() * 30)), 128, 206);
+      y = 226;
+    } else {
+      // a drop cap
+      g.font = 'bold 34px Georgia, serif';
+      g.textAlign = 'left';
+      g.fillStyle = '#7a2a1e';
+      g.fillText('L', 22, 78);
+      g.fillStyle = '#2a2018';
+    }
+    // lines of type: grey bars broken into words, ragged at the end of paragraphs
+    for (; y < 360; y += 11) {
+      let x = y < 90 && !drawing ? 56 : 22;
+      const end = rnd() < 0.12 ? 22 + rnd() * 150 : 234;
+      while (x < end) {
+        const w = 6 + rnd() * 26;
+        g.fillStyle = `rgba(40,30,24,${0.55 + rnd() * 0.25})`;
+        g.fillRect(x, y, Math.min(w, end - x), 3.2);
+        x += w + 4;
+      }
+      if (end < 200) y += 6;
+    }
+    g.font = '9px Georgia, serif';
+    g.textAlign = 'center';
+    g.fillStyle = '#2a2018';
+    g.fillText(String(12 + seed), 128, 376);
+  });
+}
+
 /** An open book lying on a table, its pages curling up from the spine. */
 export function openBook(seed: number): THREE.Group {
   const g = new THREE.Group();
@@ -122,7 +208,7 @@ export function openBook(seed: number): THREE.Group {
       p.setY(i, p.getY(i) + Math.sin((x / 0.14) * Math.PI * 0.9) * 0.012 - (x < 0.01 ? 0.005 : 0));
     }
     geo.computeVertexNormals();
-    const leaf = new THREE.Mesh(geo, pages);
+    const leaf = new THREE.Mesh(geo, [pages, pages, toon({ map: pageTex(seed * 2 + (s > 0 ? 1 : 0), s > 0), rim: 0.05 }), pages, pages, pages]);
     leaf.position.set(s * 0.07, 0.016, 0);
     leaf.scale.x = s;
     g.add(leaf);
@@ -130,7 +216,7 @@ export function openBook(seed: number): THREE.Group {
   return shadowed(g);
 }
 
-const copper = toon({ color: 0xc8784a, rim: 0.65, emissive: 0x2a1006, emissiveIntensity: 0.4 });
+const copper = toon({ color: 0xb06a42, rim: 0.4 });
 /** The copper kettle. Spout on +x. */
 export function kettle(): THREE.Group {
   const g = new THREE.Group();
@@ -266,7 +352,7 @@ function quiltTex(): THREE.CanvasTexture {
 function ragRugTex(): THREE.CanvasTexture {
   return canvasTex(1024, 1024, (g) => {
     const rnd = makeRng(55);
-    const pal = ['#a8543e', '#c8a060', '#5a6a8a', '#7a8a5a', '#d8c8a8', '#8a4a4a', '#b88a5a'];
+    const pal = ['#9a5a46', '#b89a68', '#6a7088', '#7a8462', '#d0c0a0', '#84564e', '#a88a64', '#c8b490'];
     g.fillStyle = '#8a6a4a';
     g.fillRect(0, 0, 1024, 1024);
     let col = pal[0];
@@ -339,7 +425,7 @@ export function hearth(height: number, stone: THREE.Material, plaster: THREE.Mat
   const rnd = makeRng(12);
   const W = 1.5;
   const D = 0.6;
-  const soot = toon({ color: 0x2a221e, rim: 0 });
+  const sootM = toon({ color: 0x2a221e, rim: 0 });
   // the breast, around an opening
   const op = { z0: -0.45, z1: 0.45, y0: 0.18, y1: 0.98 };
   const part = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number) => {
@@ -352,20 +438,28 @@ export function hearth(height: number, stone: THREE.Material, plaster: THREE.Mat
   part(0, D, op.y1, height, op.z0, op.z1);
   part(0, D, 0, op.y0, op.z0, op.z1);
   // inside: soot-black back and sides
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.06, op.y1 - op.y0, op.z1 - op.z0), soot);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.06, op.y1 - op.y0, op.z1 - op.z0), sootM);
   back.position.set(0.06, (op.y0 + op.y1) / 2, 0);
   g.add(back);
-  // the opening is framed in rough stones, set by hand around it
-  const arch: [number, number][] = [];
-  for (let y = op.y0 - 0.1; y < op.y1; y += 0.13 + rnd() * 0.04) arch.push([op.z0 - 0.07, y], [op.z1 + 0.07, y]);
-  for (let z = op.z0 - 0.04; z <= op.z1 + 0.05; z += 0.12 + rnd() * 0.03) arch.push([z, op.y1 + 0.05]);
-  for (const [z, y] of arch) {
-    const s = new THREE.Mesh(new THREE.IcosahedronGeometry(0.075 + rnd() * 0.03, 1), stone);
-    s.scale.set(0.45, 0.75 + rnd() * 0.3, 0.9 + rnd() * 0.3);
-    s.position.set(D - 0.01, y, z);
-    s.rotation.set(rnd() * 0.4, rnd() * 0.4, rnd() * 0.4);
-    g.add(s);
+  // the opening is framed in rough stones of every size, set by hand, with one long stone for a lintel
+  const stoneAt = (z: number, y: number, r: number, flat = 1) => {
+    const st = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), stone);
+    st.scale.set(0.35, (0.6 + rnd() * 0.35) * flat, 0.8 + rnd() * 0.5);
+    st.position.set(D - 0.01 + (rnd() - 0.5) * 0.02, y, z);
+    st.rotation.set((rnd() - 0.5) * 0.5, (rnd() - 0.5) * 0.3, (rnd() - 0.5) * 0.6);
+    g.add(st);
+  };
+  for (const side of [op.z0 - 0.08, op.z1 + 0.08]) {
+    let y = op.y0 - 0.12;
+    while (y < op.y1 - 0.05) {
+      const r = 0.06 + rnd() * 0.06;
+      stoneAt(side + (rnd() - 0.5) * 0.05, y + r * 0.5, r);
+      y += r * 1.05;
+    }
   }
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, op.z1 - op.z0 + 0.36, 2, 2, 8), stone);
+  lintel.position.set(D - 0.01, op.y1 + 0.02, 0);
+  g.add(organic(lintel, 0.04, 7));
   // hearthstone, a little proud of the floor, worn in the middle
   const hs = rbox(0.55, 0.06, W + 0.1, M.stone, 0.02);
   hs.position.set(D + 0.25, 0.03, 0);
@@ -435,9 +529,9 @@ export function hearth(height: number, stone: THREE.Material, plaster: THREE.Mat
   crane.rotation.y = -0.7;
   g.add(crane);
   // the stones above the opening have been blackened by smoke
-  const smoke = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.5), toon({ color: 0x1a1410, transparent: true, opacity: 0.35, rim: 0 }));
+  const smoke = soot(1.1, 0.9);
   smoke.rotation.y = Math.PI / 2;
-  smoke.position.set(D + 0.004, op.y1 + 0.3, 0);
+  smoke.position.set(D + 0.004, op.y1 + 0.4, 0);
   smoke.userData.noShadow = true;
   g.add(smoke);
   shadowed(g);
@@ -454,34 +548,112 @@ export function hearth(height: number, stone: THREE.Material, plaster: THREE.Mat
  */
 export function armchair(seed = 1): THREE.Group {
   const g = new THREE.Group();
-  const fabric = toon({ map: clothTex(seed + 40, '#8a4a36'), rim: 0.35 });
-  (fabric.map as THREE.Texture).repeat.set(2, 2);
+  const fabric = toon({ map: damaskTex(seed, false), rim: 0.35 });
+  // the arms are rubbed pale where hands have rested for years
+  const worn = toon({ map: damaskTex(seed, true), rim: 0.35 });
   const legM = M.beam;
-  for (const [x, z] of [[-0.36, -0.32], [0.36, -0.32], [-0.36, 0.32], [0.36, 0.32]]) {
-    const leg = lathe([[0, 0], [0.025, 0], [0.03, 0.05], [0.022, 0.12], [0.028, 0.14], [0, 0.14]], legM, 10);
-    leg.position.set(x, 0, z);
+  for (const [x, z, front] of [[-0.36, -0.32, 0], [0.36, -0.32, 0], [-0.36, 0.32, 1], [0.36, 0.32, 1]]) {
+    // turned front legs on little brass castors; plain square ones at the back
+    const leg = front
+      ? lathe([[0, 0.02], [0.022, 0.02], [0.03, 0.04], [0.02, 0.07], [0.032, 0.1], [0.026, 0.13], [0.03, 0.15], [0, 0.15]], legM, 14)
+      : rbox(0.045, 0.14, 0.045, legM, 0.008).translateY(0.08);
+    leg.position.x = x;
+    leg.position.z = z;
     g.add(leg);
+    if (front) {
+      const castor = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), M.brass);
+      castor.position.set(x, 0.018, z);
+      g.add(castor);
+    }
   }
   const base = rbox(0.84, 0.22, 0.78, fabric, 0.06);
   base.position.y = 0.25;
   g.add(base);
+  // the seat cushion keeps the hollow of whoever sat in it
   const seat = rbox(0.62, 0.13, 0.66, fabric, 0.06);
+  {
+    const p = seat.geometry.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      const z = p.getZ(i);
+      const y = p.getY(i);
+      if (y > 0) p.setY(i, y - 0.03 * Math.exp(-(x * x) / 0.05 - ((z - 0.02) * (z - 0.02)) / 0.07));
+    }
+    seat.geometry.computeVertexNormals();
+  }
   seat.position.set(0, 0.42, 0.04);
   g.add(seat);
+  // piping along the front of the cushion
+  const piping = new THREE.Mesh(
+    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-0.3, 0.47, 0.37), new THREE.Vector3(0, 0.468, 0.375), new THREE.Vector3(0.3, 0.47, 0.37)]), 16, 0.008, 6),
+    worn,
+  );
+  g.add(piping);
   const back = rbox(0.8, 0.72, 0.2, fabric, 0.09);
   back.position.set(0, 0.72, -0.31);
   back.rotation.x = -0.14;
   g.add(back);
   for (const s of [-1, 1]) {
-    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.56, 6, 14), fabric);
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.56, 6, 14), worn);
     arm.rotation.x = Math.PI / 2;
     arm.position.set(s * 0.37, 0.53, 0.02);
     g.add(arm);
     const side = rbox(0.14, 0.24, 0.7, fabric, 0.05);
     side.position.set(s * 0.37, 0.4, 0.02);
     g.add(side);
+    // a scroll of wood at the end of each arm
+    const scroll = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.018, 8, 20, Math.PI * 1.5), M.beam);
+    scroll.rotation.y = Math.PI / 2;
+    scroll.position.set(s * 0.37, 0.5, 0.33);
+    g.add(scroll);
   }
   organic(g, 0.02, seed);
+  // the tufted front of the back: a pillowy panel pulled in at each button
+  {
+    const buttons: [number, number][] = [[-0.22, 0.14], [0, 0.14], [0.22, 0.14], [-0.11, -0.04], [0.11, -0.04], [-0.22, -0.2], [0, -0.2], [0.22, -0.2]];
+    const links: [number, number][] = [[0, 3], [1, 3], [1, 4], [2, 4], [3, 5], [3, 6], [4, 6], [4, 7]];
+    const geo = new THREE.PlaneGeometry(0.66, 0.6, 66, 60);
+    const p = geo.attributes.position as THREE.BufferAttribute;
+    const seg = (x: number, y: number, a: [number, number], b: [number, number]) => {
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy)));
+      return Math.hypot(x - a[0] - t * dx, y - a[1] - t * dy);
+    };
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      const y = p.getY(i);
+      const edge = Math.max(Math.abs(x) / 0.33, Math.abs(y) / 0.3);
+      let z = 0.035 * (1 - edge * edge * edge);
+      for (const [bx, by] of buttons) z -= 0.03 * Math.exp(-((x - bx) ** 2 + (y - by) ** 2) / 0.0012);
+      for (const [a, b] of links) z -= 0.008 * Math.exp(-(seg(x, y, buttons[a], buttons[b]) ** 2) / 0.00012);
+      p.setZ(i, Math.max(0, z));
+    }
+    geo.computeVertexNormals();
+    const panel = new THREE.Mesh(geo, fabric);
+    panel.position.set(0, 0.02, 0.1);
+    back.add(panel);
+    for (const [bx, by] of buttons) {
+      const btn = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 6), worn);
+      btn.scale.z = 0.6;
+      btn.position.set(bx, by + 0.02, 0.105);
+      back.add(btn);
+    }
+  }
+  // a darn on the right arm, in a thread that almost matches
+  {
+    const darn = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.09), toon({ map: darnTex(), transparent: true, rim: 0.2 }));
+    darn.position.set(0.37, 0.622, 0.12);
+    darn.rotation.set(-Math.PI / 2, 0, 0.3);
+    g.add(darn);
+  }
+  // an embroidered cushion pushed into the right corner
+  {
+    const cush = rbox(0.34, 0.3, 0.1, toon({ map: cushionTex(), rim: 0.3 }), 0.045);
+    cush.position.set(0.17, 0.62, -0.17);
+    cush.rotation.set(-0.35, -0.35, 0.18);
+    g.add(organic(cush, 0.08, 4));
+  }
   // the blanket, thrown over the left arm and left to fall
   const geo = new THREE.PlaneGeometry(0.7, 1.1, 36, 54);
   geo.rotateX(-Math.PI / 2);
@@ -515,6 +687,116 @@ function rollColliderZ(x: number, y: number, z0: number, z1: number, r: number):
       p.y = y + dy * k;
     },
   };
+}
+
+/** Old damask: a faded flower repeat on rust, darker in the creases; `worn` rubs it pale and thin. */
+function damaskTex(seed: number, worn: boolean): THREE.CanvasTexture {
+  const t = canvasTex(512, 512, (g) => {
+    const rnd = makeRng(seed + (worn ? 9 : 0));
+    g.fillStyle = worn ? '#a0644a' : '#8a4632';
+    g.fillRect(0, 0, 512, 512);
+    // the weave
+    g.fillStyle = 'rgba(0,0,0,0.06)';
+    for (let i = 0; i < 512; i += 3) g.fillRect(i, 0, 1, 512);
+    g.fillStyle = 'rgba(255,230,200,0.04)';
+    for (let i = 0; i < 512; i += 3) g.fillRect(0, i, 512, 1);
+    // the motif: a stylised flower with leaves, on a half-drop grid
+    const motif = (cx: number, cy: number) => {
+      g.fillStyle = worn ? 'rgba(240,200,160,0.12)' : 'rgba(230,170,120,0.2)';
+      for (let p = 0; p < 5; p++) {
+        const a = (p / 5) * Math.PI * 2 - Math.PI / 2;
+        g.beginPath();
+        g.ellipse(cx + Math.cos(a) * 14, cy + Math.sin(a) * 14, 12, 6, a, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.beginPath();
+      g.arc(cx, cy, 6, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = g.fillStyle;
+      g.lineWidth = 3;
+      g.beginPath();
+      g.moveTo(cx, cy + 18);
+      g.bezierCurveTo(cx - 10, cy + 40, cx + 10, cy + 50, cx, cy + 64);
+      g.stroke();
+      for (const s of [-1, 1]) {
+        g.beginPath();
+        g.ellipse(cx + s * 12, cy + 42, 12, 5, s * 0.6, 0, Math.PI * 2);
+        g.fill();
+      }
+    };
+    for (let y = -64; y < 576; y += 128) for (let x = 0; x < 576; x += 128) motif(x + ((y / 128) % 2 ? 64 : 0), y);
+    // wear and dirt
+    for (let i = 0; i < (worn ? 30 : 12); i++) {
+      const x = rnd() * 512;
+      const y = rnd() * 512;
+      const r = 20 + rnd() * 70;
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, worn ? 'rgba(235,205,170,0.22)' : rnd() < 0.5 ? 'rgba(40,20,10,0.12)' : 'rgba(240,210,170,0.08)');
+      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grd;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+  });
+  t.repeat.set(1.5, 1.5);
+  return t;
+}
+
+/** A square of darning: criss-crossed stitches in a slightly wrong red. */
+function darnTex(): THREE.CanvasTexture {
+  return canvasTex(64, 64, (g) => {
+    g.strokeStyle = '#b05a40';
+    g.lineWidth = 2.5;
+    for (let i = 6; i < 60; i += 5) {
+      g.beginPath();
+      g.moveTo(i + Math.sin(i) * 2, 6);
+      g.lineTo(i - Math.sin(i) * 2, 58);
+      g.stroke();
+      g.beginPath();
+      g.moveTo(6, i);
+      g.lineTo(58, i + Math.cos(i) * 2);
+      g.stroke();
+    }
+  });
+}
+
+/** Cross-stitch on linen: a little house and two birds, with a border. */
+function cushionTex(): THREE.CanvasTexture {
+  return canvasTex(256, 256, (g) => {
+    g.fillStyle = '#e6d8b8';
+    g.fillRect(0, 0, 256, 256);
+    const X = (x: number, y: number, c: string) => {
+      g.strokeStyle = c;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(x * 8 + 1, y * 8 + 1);
+      g.lineTo(x * 8 + 7, y * 8 + 7);
+      g.moveTo(x * 8 + 7, y * 8 + 1);
+      g.lineTo(x * 8 + 1, y * 8 + 7);
+      g.stroke();
+    };
+    for (let i = 2; i < 30; i++) {
+      X(i, 2, '#8a2a2a');
+      X(i, 29, '#8a2a2a');
+      X(2, i, '#8a2a2a');
+      X(29, i, '#8a2a2a');
+    }
+    // the house
+    for (let x = 11; x <= 20; x++) for (let y = 15; y <= 22; y++) X(x, y, '#c88a4a');
+    for (let r = 0; r < 5; r++) for (let x = 10 + r; x <= 21 - r; x++) X(x, 14 - r, '#6a2a22');
+    X(15, 20, '#3a2a1a');
+    X(15, 21, '#3a2a1a');
+    X(16, 20, '#3a2a1a');
+    X(16, 21, '#3a2a1a');
+    X(13, 17, '#4a6a9a');
+    X(18, 17, '#4a6a9a');
+    for (const [bx, by] of [[6, 8], [23, 7]]) {
+      X(bx, by, '#3a5a8a');
+      X(bx + 1, by, '#3a5a8a');
+      X(bx + 2, by - 1, '#3a5a8a');
+      X(bx - 1, by - 1, '#3a5a8a');
+    }
+    for (let x = 4; x < 28; x++) X(x, 24, '#4a7a3a');
+  });
 }
 
 /** Knitted wool in wide stripes, cream and madder red, with a fringe-coloured border. */
@@ -991,97 +1273,220 @@ export function hangingCloak(seed: number, color: string, w = 0.62, h = 1.05): T
 }
 
 /**
- * A cat asleep, curled into a loaf with its tail round its paws. For now it
- * only breathes; one day it will have its own day.
+ * A cat asleep, curled up with its nose in its tail. The body is modelled
+ * like clay: overlapping spheres melted into one smooth surface (marching
+ * cubes), coloured ball by ball (ginger, cream on the chest and paws, a
+ * darker tail tip); the tabby bands are painted on by the shader, across
+ * the curl of the back. Ears, closed eyes, nose and whiskers are added on.
+ * For now it only breathes; one day it will have its own day.
  */
 export function sleepingCat(): { group: THREE.Group; breathe: (t: number) => void } {
   const g = new THREE.Group();
-  // tabby bands that run across the back, soft and uneven
-  const furTex = canvasTex(256, 256, (c) => {
-    c.fillStyle = '#d4a06a';
-    c.fillRect(0, 0, 256, 256);
-    const rnd = makeRng(4);
-    for (let y = 12; y < 256; y += 22 + rnd() * 10) {
-      c.strokeStyle = `rgba(150,84,40,${0.35 + rnd() * 0.2})`;
-      c.lineWidth = 5 + rnd() * 6;
-      c.beginPath();
-      c.moveTo(0, y);
-      for (let x = 0; x <= 256; x += 16) c.lineTo(x, y + Math.sin(x * 0.05 + y) * 5);
-      c.stroke();
+  const SQ = 0.78; // the whole cat is modelled taller, then squashed: a lying body is flatter than round
+  const L = 0.56;
+  const MIN = new THREE.Vector3(-L / 2, -0.04, -L / 2);
+  const RES = 76;
+  const mc = new MarchingCubes(RES, new THREE.MeshBasicMaterial(), false, false, 60000);
+  const balls: { p: THREE.Vector3; r: number; col: THREE.Color }[] = [];
+  mc.isolation = 80;
+  const SUB = 170; // a sharp falloff: the spheres melt together only where they touch
+  const GINGER = new THREE.Color(0xd8924e);
+  const CREAM = new THREE.Color(0xf2dcb8);
+  const DARK = new THREE.Color(0xa05a2a);
+  const ball = (p: THREE.Vector3, r: number, col: THREE.Color) => {
+    const n = new THREE.Vector3(p.x, p.y / SQ, p.z).sub(MIN).divideScalar(L);
+    const rn = r / L;
+    mc.addBall(n.x, n.y, n.z, rn * rn * (80 + SUB), SUB);
+    balls.push({ p: p.clone(), r, col });
+  };
+  const arc = (deg: number, r: number, y: number) => new THREE.Vector3(Math.cos((deg * Math.PI) / 180) * r, y, Math.sin((deg * Math.PI) / 180) * r);
+  mc.reset();
+  // the back, from the haunch round to the chest
+  const spine: [number, number][] = [[198, 0.095], [215, 0.09], [235, 0.085], [255, 0.08], [275, 0.078], [295, 0.08], [315, 0.082], [335, 0.08], [355, 0.074], [12, 0.066]];
+  for (const [a, r] of spine) ball(arc(a, 0.115, 0.07), r * 0.9, GINGER);
+  // the haunch and the folded hind leg
+  ball(arc(195, 0.07, 0.065), 0.075, GINGER);
+  ball(arc(165, 0.09, 0.03), 0.04, GINGER);
+  ball(arc(150, 0.1, 0.02), 0.028, CREAM);
+  // the chest and the soft belly on the inside of the curl
+  ball(arc(18, 0.09, 0.05), 0.058, CREAM);
+  ball(arc(300, 0.06, 0.035), 0.05, CREAM);
+  ball(arc(250, 0.06, 0.035), 0.045, CREAM);
+  // front paws, tucked under the chin
+  for (const [side, len] of [[-1, 3], [1, 3]] as const) {
+    for (let k = 0; k < len; k++) {
+      const p = arc(22 + k * 14, 0.095 - k * 0.012, 0.024);
+      p.x += side * 0.012;
+      p.z += side * 0.018;
+      ball(p, 0.024, CREAM);
     }
-  });
-  const fur = toon({ map: furTex, rim: 0.5 });
-  const plain = toon({ color: 0xd4a06a, rim: 0.5 });
-  const cream = toon({ color: 0xf4e2c8, rim: 0.5 });
-  const dark = toon({ color: 0x3a2418 });
-  // the body: a sphere turned so its rings run across the spine (x)
-  const bodyGeo = new THREE.SphereGeometry(0.16, 32, 20);
-  bodyGeo.rotateZ(Math.PI / 2);
-  const body = new THREE.Mesh(bodyGeo, fur);
-  body.scale.set(1.3, 0.6, 0.95);
-  body.position.y = 0.09;
+  }
+  // the head, resting on the paws, turned in towards the tail
+  const headC = arc(48, 0.075, 0.068);
+  const face = new THREE.Vector3(Math.cos((150 * Math.PI) / 180), 0, Math.sin((150 * Math.PI) / 180));
+  const side = new THREE.Vector3(-face.z, 0, face.x);
+  ball(headC, 0.054, GINGER);
+  for (const s of [-1, 1]) ball(headC.clone().addScaledVector(face, 0.022).addScaledVector(side, s * 0.03).add(new THREE.Vector3(0, -0.018, 0)), 0.028, GINGER);
+  ball(headC.clone().addScaledVector(face, 0.045).add(new THREE.Vector3(0, -0.02, 0)), 0.022, CREAM);
+  ball(headC.clone().addScaledVector(face, 0.03).add(new THREE.Vector3(0, -0.036, 0)), 0.02, CREAM);
+  // the tail, from under the haunch round the front, the tip at the nose
+  const tail = new THREE.CatmullRomCurve3([arc(205, 0.15, 0.04), arc(175, 0.175, 0.03), arc(140, 0.17, 0.028), arc(105, 0.155, 0.028), arc(80, 0.13, 0.03), arc(68, 0.105, 0.035)]);
+  const TN = 26;
+  for (let k = 0; k <= TN; k++) {
+    const t = k / TN;
+    ball(tail.getPointAt(t), 0.03 - 0.009 * t, t > 0.86 ? DARK : GINGER);
+  }
+  mc.update();
+  // bake the surface into a plain geometry, in metres
+  const src = mc.geometry;
+  const count = src.drawRange.count === Infinity ? src.attributes.position.count : src.drawRange.count;
+  const pos = new Float32Array(count * 3);
+  const nor = new Float32Array(count * 3);
+  const col = new Float32Array(count * 3);
+  const sp = src.attributes.position.array as Float32Array;
+  const sn = src.attributes.normal.array as Float32Array;
+  for (let i = 0; i < count; i++) {
+    pos[i * 3] = MIN.x + ((sp[i * 3] + 1) / 2) * L;
+    pos[i * 3 + 1] = (MIN.y + ((sp[i * 3 + 1] + 1) / 2) * L) * SQ;
+    pos[i * 3 + 2] = MIN.z + ((sp[i * 3 + 2] + 1) / 2) * L;
+    nor[i * 3] = sn[i * 3];
+    nor[i * 3 + 1] = sn[i * 3 + 1] / SQ;
+    nor[i * 3 + 2] = sn[i * 3 + 2];
+  }
+  // colour each point from the spheres nearest to it, softly blended
+  const v = new THREE.Vector3();
+  const c = new THREE.Color();
+  for (let i = 0; i < count; i++) {
+    v.fromArray(pos, i * 3);
+    c.setRGB(0, 0, 0);
+    let wsum = 0;
+    for (const b of balls) {
+      const d = v.distanceTo(new THREE.Vector3(b.p.x, b.p.y, b.p.z)) / b.r;
+      const w = Math.exp(-d * d * 6);
+      c.r += b.col.r * w;
+      c.g += b.col.g * w;
+      c.b += b.col.b * w;
+      wsum += w;
+    }
+    if (wsum > 0) c.multiplyScalar(1 / wsum);
+    else c.copy(GINGER);
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.normalizeNormals();
+  src.dispose();
+  // ginger tabby: bands across the curl of the back, fine hair, none on the cream or the face
+  const fur = toon({ rim: 0.65 });
+  fur.vertexColors = true;
+  const base = fur.onBeforeCompile;
+  const hc = headC.clone();
+  hc.y *= 1;
+  fur.onBeforeCompile = (sh, r) => {
+    base.call(fur, sh, r);
+    sh.uniforms.headC = { value: hc };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLocal;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocal = position;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vLocal;\nuniform vec3 headC;\nfloat hh(vec3 p){ p = fract(p * 0.3183 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }').replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+      float ang = atan(vLocal.z, vLocal.x);
+      float band = smoothstep(0.35, 0.85, sin(ang * 15.0 + sin(ang * 4.0) * 0.8 + vLocal.y * 30.0));
+      float top = smoothstep(0.035, 0.085, vLocal.y) * smoothstep(0.075, 0.04, abs(length(vLocal.xz) - 0.115));
+      float ginger = smoothstep(0.12, 0.25, vColor.r - vColor.b);
+      float offHead = smoothstep(0.045, 0.07, distance(vLocal, headC));
+      diffuseColor.rgb *= mix(1.0, 0.7, band * top * ginger * offHead);
+      // forehead stripes: three short lines towards the ears
+      vec3 hp = vLocal - headC;
+      float fore = smoothstep(0.012, 0.0, abs(fract(atan(hp.z, hp.x) * 4.5) - 0.5) * 0.06) * smoothstep(0.02, 0.05, hp.y);
+      diffuseColor.rgb *= mix(1.0, 0.75, fore * ginger * (1.0 - offHead));
+      diffuseColor.rgb *= 0.95 + 0.1 * hh(floor(vLocal * 900.0));`,
+    );
+  };
+  const body = new THREE.Mesh(geo, fur);
   g.add(body);
-  const haunch = new THREE.Mesh(new THREE.SphereGeometry(0.1, 20, 14), fur);
-  haunch.scale.set(1, 0.7, 1);
-  haunch.position.set(-0.11, 0.08, -0.05);
-  g.add(haunch);
-  // the head, resting on the front paws, a little turned
-  const head = new THREE.Group();
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.072, 22, 16), plain);
-  skull.scale.set(1, 0.88, 1.05);
-  head.add(skull);
-  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.034, 14, 10), cream);
-  muzzle.scale.set(0.9, 0.7, 1.1);
-  muzzle.position.set(0.055, -0.022, 0);
-  head.add(muzzle);
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), toon({ color: 0xc87a7a }));
-  nose.position.set(0.087, -0.012, 0);
-  head.add(nose);
+  // the features, in a frame that faces where the cat's face does
+  const frame = new THREE.Group();
+  frame.position.set(headC.x, headC.y * 1, headC.z);
+  frame.rotation.order = 'YXZ';
+  frame.rotation.y = Math.atan2(-face.z, face.x);
+  frame.rotation.x = 0.3; // the head rolled a little on its side
+  g.add(frame);
+  const furM = toon({ color: 0xc8864a, rim: 0.6 });
+  const pink = toon({ color: 0xd88a86, rim: 0.3 });
+  const dark = toon({ color: 0x3a2214, rim: 0 });
   for (const s of [-1, 1]) {
-    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.06, 3), plain);
-    ear.position.set(-0.01, 0.065, s * 0.038);
-    ear.rotation.set(s * 0.3, 0, -0.15);
-    head.add(ear);
-    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.035, 3), toon({ color: 0xe8b0a0 }));
-    inner.position.set(0.006, 0.06, s * 0.038);
-    inner.rotation.set(s * 0.3, 0, -0.15);
-    head.add(inner);
-    // closed eyes: two little dark curves
-    const eye = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0028, 4, 10, Math.PI * 0.8), dark);
-    eye.position.set(0.062, 0.012, s * 0.03);
-    eye.rotation.set(0, Math.PI / 2 - s * 0.35, Math.PI * 1.1);
-    head.add(eye);
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.044, 3, 1), furM);
+    ear.scale.set(1, 1, 0.5);
+    ear.position.set(-0.014, 0.05 * SQ, s * 0.032);
+    ear.rotation.set(s * 0.35, 0, -0.2);
+    frame.add(ear);
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.017, 0.03, 3, 1), pink);
+    inner.scale.set(1, 1, 0.4);
+    inner.position.set(-0.003, 0.048 * SQ, s * 0.032);
+    inner.rotation.set(s * 0.35, 0, -0.2);
+    frame.add(inner);
+    for (let k = 0; k < 3; k++) {
+      const w = new THREE.Mesh(
+        new THREE.TubeGeometry(
+          new THREE.QuadraticBezierCurve3(
+            new THREE.Vector3(0.06, -0.016 - k * 0.003, s * 0.016),
+            new THREE.Vector3(0.072, -0.016 - k * 0.006, s * (0.055 + k * 0.006)),
+            new THREE.Vector3(0.07, -0.026 - k * 0.012, s * (0.095 + k * 0.01)),
+          ),
+          8,
+          0.0006,
+          3,
+        ),
+        toon({ color: 0xfff6e8, rim: 0.8 }),
+      );
+      frame.add(w);
+    }
   }
-  head.position.set(0.2, 0.085, 0.04);
-  head.rotation.set(0.25, -0.35, -0.12);
-  g.add(head);
-  for (const z of [0.0, 0.07]) {
-    const paw = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, 0.07, 4, 8), cream);
-    paw.rotation.z = Math.PI / 2;
-    paw.position.set(0.21, 0.025, z);
-    g.add(paw);
+  // eyes and nose sit on the actual surface of the face: found by casting a ray at it
+  g.updateMatrixWorld(true);
+  const onFace = (dir: THREE.Vector3): { p: THREE.Vector3; n: THREE.Vector3 } | null => {
+    const d = dir.clone().normalize().applyQuaternion(frame.quaternion);
+    const from = frame.position.clone().addScaledVector(d, 0.11);
+    const hit = new THREE.Raycaster(from, d.clone().negate(), 0, 0.11).intersectObject(body).find((h) => h.point.distanceTo(frame.position) < 0.08);
+    if (!hit || !hit.face) return null;
+    return { p: hit.point, n: hit.face.normal.clone() };
+  };
+  for (const s of [-1, 1]) {
+    const at = onFace(new THREE.Vector3(0.8, 0.28, s * 0.42));
+    if (!at) continue;
+    // shut, sleepy eyes: a dark curve with a paler lid above
+    const lid = new THREE.Mesh(new THREE.CircleGeometry(0.012, 14), toon({ color: 0xe8b47e, rim: 0.2 }));
+    lid.position.copy(at.p).addScaledVector(at.n, 0.0015);
+    lid.lookAt(lid.position.clone().add(at.n));
+    lid.scale.set(1.3, 0.8, 1);
+    g.add(lid);
+    const eye = new THREE.Mesh(new THREE.TorusGeometry(0.011, 0.0026, 5, 14, Math.PI * 0.8), dark);
+    eye.position.copy(at.p).addScaledVector(at.n, 0.002);
+    eye.lookAt(eye.position.clone().add(at.n));
+    eye.rotateZ(-Math.PI / 2 - Math.PI * 0.4 + s * 0.25);
+    g.add(eye);
   }
-  // the tail, wrapped round the front
-  const tailPts = [
-    new THREE.Vector3(-0.2, 0.05, -0.06),
-    new THREE.Vector3(-0.2, 0.035, 0.08),
-    new THREE.Vector3(-0.06, 0.03, 0.155),
-    new THREE.Vector3(0.1, 0.03, 0.15),
-    new THREE.Vector3(0.22, 0.035, 0.12),
-  ];
-  const tail = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(tailPts), 30, 0.026, 10), fur);
-  g.add(tail);
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.026, 10, 8), toon({ color: 0x8a5432, rim: 0.4 }));
-  tip.position.copy(tailPts[4]);
-  g.add(tip);
-  organic(g, 0.03, 6);
+  const nAt = onFace(new THREE.Vector3(1, -0.05, 0));
+  if (nAt) {
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.008, 10, 6), pink);
+    nose.scale.set(1.2, 0.7, 0.8);
+    nose.position.copy(nAt.p);
+    nose.lookAt(nose.position.clone().add(nAt.n));
+    g.add(nose);
+  }
   shadowed(g);
+  frame.traverse((o) => {
+    if ((o as THREE.Mesh).geometry instanceof THREE.TubeGeometry) o.castShadow = false;
+  });
   g.userData.noWonk = true;
   return {
     group: g,
     breathe: (t) => {
-      const k = 1 + Math.sin(t * 1.6) * 0.03;
-      body.scale.set(1.3, 0.6 * k, 0.95 * (1 + (k - 1) * 0.5));
+      // a slow breath: the flank rises and falls
+      const k = Math.sin(t * 1.5) * 0.02;
+      body.scale.set(1 + k * 0.3, 1 + k, 1 + k * 0.3);
     },
   };
 }

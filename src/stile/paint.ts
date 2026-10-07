@@ -75,48 +75,105 @@ function finish(c: HTMLCanvasElement, repeat: [number, number] = [1, 1]): THREE.
   return t;
 }
 
-/** Wood: an even base color, a few long hand-drawn grain lines, optional plank seams. */
-export function woodTex(seed: number, base: string, line: string, opts: { planks?: number; knots?: number } = {}): THREE.CanvasTexture {
-  const [c, g] = canvas(512);
+/**
+ * Wood: an even base colour with soft streaks, many fine grain lines that
+ * wander and part around the knots, pores, and now and then the arched
+ * "flame" figure of a board sawn through the heart. Optional plank seams.
+ */
+export function woodTex(seed: number, base: string, line: string, opts: { planks?: number; knots?: number; size?: number } = {}): THREE.CanvasTexture {
+  const S = opts.size ?? 1024;
+  const k = S / 512;
+  const [c, g] = canvas(S);
   const rnd = makeRng(seed);
   g.fillStyle = base;
-  g.fillRect(0, 0, 512, 512);
-  // broad, soft value changes, like a light wash of paint
-  for (let i = 0; i < 6; i++) {
-    g.fillStyle = `rgba(255,240,210,${0.04 + rnd() * 0.05})`;
-    g.fillRect(rnd() * 512, 0, 30 + rnd() * 90, 512);
-  }
-  g.strokeStyle = line;
-  g.lineCap = 'round';
-  for (let i = 0; i < 22; i++) {
-    g.globalAlpha = 0.25 + rnd() * 0.3;
-    g.lineWidth = 1 + rnd() * 2;
-    const x = rnd() * 512;
+  g.fillRect(0, 0, S, S);
+  // broad, soft streaks of lighter and darker wood
+  for (let i = 0; i < 14; i++) {
+    const light = rnd() < 0.55;
+    g.fillStyle = light ? `rgba(255,240,210,${0.03 + rnd() * 0.05})` : `rgba(60,30,10,${0.03 + rnd() * 0.05})`;
+    const x = rnd() * S;
+    const w = (10 + rnd() * 70) * k;
     g.beginPath();
     g.moveTo(x, 0);
-    for (let y = 0; y <= 512; y += 32) g.lineTo(x + Math.sin(y * 0.012 + i) * (4 + rnd() * 6), y);
+    for (let y = 0; y <= S; y += 32 * k) g.lineTo(x + Math.sin(y * 0.004 + i) * 12 * k, y);
+    for (let y = S; y >= 0; y -= 32 * k) g.lineTo(x + w + Math.sin(y * 0.005 + i * 2) * 12 * k, y);
+    g.fill();
+  }
+  const knots: [number, number, number][] = [];
+  for (let i = 0; i < (opts.knots ?? 2); i++) knots.push([rnd() * S, rnd() * S, (6 + rnd() * 8) * k]);
+  // grain lines: they bend around the knots as real grain does
+  const grainX = (x0: number, y: number, i: number) => {
+    let x = x0 + Math.sin(y * 0.006 / k + i * 0.7) * 5 * k + Math.sin(y * 0.021 / k + i) * 1.5 * k;
+    for (const [kx, ky, kr] of knots) {
+      const dy = (y - ky) / (kr * 3.2);
+      const dx = x - kx;
+      const f = Math.exp(-dy * dy) * Math.exp(-(dx * dx) / (kr * kr * 9));
+      x += Math.sign(dx || 1) * kr * 1.6 * f;
+    }
+    return x;
+  };
+  g.strokeStyle = line;
+  g.lineCap = 'round';
+  const n = 90;
+  for (let i = 0; i < n; i++) {
+    const x0 = (i / n) * S + (rnd() - 0.5) * (S / n) * 2;
+    g.globalAlpha = rnd() < 0.15 ? 0.3 + rnd() * 0.2 : 0.07 + rnd() * 0.16;
+    g.lineWidth = (0.6 + rnd() * (rnd() < 0.15 ? 2.2 : 0.9)) * k;
+    // lines start and stop: grain fades in and out along the board
+    let y = rnd() < 0.3 ? rnd() * S * 0.5 : 0;
+    const end = rnd() < 0.3 ? y + S * (0.3 + rnd() * 0.5) : S;
+    g.beginPath();
+    g.moveTo(grainX(x0, y, i), y);
+    for (y += 8 * k; y <= end; y += 8 * k) g.lineTo(grainX(x0, y, i), y);
     g.stroke();
   }
-  for (let k = 0; k < (opts.knots ?? 2); k++) {
-    const x = rnd() * 512;
-    const y = rnd() * 512;
-    g.globalAlpha = 0.5;
-    g.lineWidth = 2;
+  // the flame figure: nested arches, once in a while
+  if (rnd() < 0.5) {
+    const cx = S * (0.25 + rnd() * 0.5);
+    const top = S * (0.2 + rnd() * 0.5);
+    for (let j = 0; j < 7; j++) {
+      g.globalAlpha = 0.08 + rnd() * 0.1;
+      g.lineWidth = (0.8 + rnd()) * k;
+      const w = (14 + j * 13) * k;
+      g.beginPath();
+      g.moveTo(cx - w, S);
+      g.bezierCurveTo(cx - w, top + j * 22 * k + 60 * k, cx - w * 0.2, top + j * 22 * k, cx, top + j * 22 * k);
+      g.bezierCurveTo(cx + w * 0.2, top + j * 22 * k, cx + w, top + j * 22 * k + 60 * k, cx + w, S);
+      g.stroke();
+    }
+  }
+  // knots: a dark heart with rings
+  for (const [x, y, r] of knots) {
+    g.globalAlpha = 0.55;
+    g.fillStyle = line;
     g.beginPath();
-    g.ellipse(x, y, 6 + rnd() * 5, 14 + rnd() * 8, 0, 0, Math.PI * 2);
-    g.stroke();
+    g.ellipse(x, y, r * 0.45, r * 0.8, 0, 0, Math.PI * 2);
+    g.fill();
+    g.lineWidth = 1.2 * k;
+    for (let j = 1; j < 4; j++) {
+      g.globalAlpha = 0.35 / j;
+      g.beginPath();
+      g.ellipse(x, y, r * (0.45 + j * 0.3), r * (0.8 + j * 0.55), 0, 0, Math.PI * 2);
+      g.stroke();
+    }
+  }
+  // pores: tiny dashes along the grain
+  g.fillStyle = line;
+  for (let i = 0; i < 900; i++) {
+    g.globalAlpha = 0.08 + rnd() * 0.12;
+    g.fillRect(rnd() * S, rnd() * S, 0.8 * k, (2 + rnd() * 5) * k);
   }
   g.globalAlpha = 1;
   if (opts.planks) {
     // boards of slightly different widths and tones, never a perfect grid
     let x = 0;
-    const avg = 512 / opts.planks;
-    while (x < 512) {
+    const avg = S / opts.planks;
+    while (x < S) {
       const w = avg * (0.75 + rnd() * 0.5);
       g.fillStyle = rnd() < 0.5 ? `rgba(255,235,200,${rnd() * 0.12})` : `rgba(60,30,10,${rnd() * 0.12})`;
-      g.fillRect(x, 0, w, 512);
+      g.fillRect(x, 0, w, S);
       g.fillStyle = line;
-      g.fillRect(x, 0, 3 + rnd() * 2, 512);
+      g.fillRect(x, 0, (2 + rnd() * 2) * k, S);
       x += w;
     }
   }

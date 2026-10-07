@@ -7,9 +7,11 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { CASA_INSPECT } from '../data/casa';
+import { LIBRI } from '../data/libri';
 import { buildCountryside, buildSky } from '../stile/sky';
 import { Carry } from './carry';
 import { tickFlames } from './furniture';
+import { Reader } from './reader';
 import { buildHouse, HOUSE, roofAbove, STAIR, UP } from './house';
 
 /**
@@ -184,8 +186,56 @@ document.addEventListener('mousedown', (e) => {
   if (controls.isLocked && e.button === 0 && !seated) carry.use(floorY);
 });
 
+const reader = new Reader();
+const shelfEl = document.getElementById('shelf')!;
+let choosing = false;
+function openShelf(): void {
+  choosing = true;
+  const ul = shelfEl.querySelector('ul')!;
+  ul.innerHTML = '';
+  LIBRI.forEach((b, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<b>${i + 1}</b>${b.titolo}<span>${b.nota}</span>`;
+    ul.append(li);
+  });
+  const last = document.createElement('li');
+  last.innerHTML = '<span>E per lasciar stare</span>';
+  ul.append(last);
+  shelfEl.classList.add('open');
+}
+function closeShelf(): void {
+  choosing = false;
+  shelfEl.classList.remove('open');
+}
+function startReading(i: number): void {
+  closeShelf();
+  reader.open(LIBRI[i]);
+  controls.enabled = false;
+}
+function stopReading(): void {
+  reader.close();
+  controls.enabled = true;
+}
+controls.addEventListener('unlock', () => {
+  if (reader.isOpen) stopReading();
+  if (choosing) closeShelf();
+});
+
 const keys = new Set<string>();
 window.addEventListener('keydown', (e) => {
+  // while a book is open, or the shelf is, the keys belong to it
+  if (reader.isOpen) {
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft') reader.turn(-1);
+    if (e.code === 'KeyD' || e.code === 'ArrowRight') reader.turn(1);
+    if (e.code === 'KeyE') stopReading();
+    return;
+  }
+  if (choosing) {
+    const n = Number(e.code.slice(5)) - 1;
+    if (e.code.startsWith('Digit') && n >= 0 && n < LIBRI.length) startReading(n);
+    if (e.code === 'KeyE') closeShelf();
+    return;
+  }
   keys.add(e.code);
   if (e.code.startsWith('Digit')) {
     const n = Number(e.code.slice(5)) - 1;
@@ -225,6 +275,7 @@ let bobT = 0;
 function move(dt: number): void {
   const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   const s = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+  if (reader.isOpen || choosing) return;
   if (seated) {
     if (controls.isLocked && (f !== 0 || s !== 0)) {
       // stand up again
@@ -282,12 +333,19 @@ function interact(): void {
     seated = { back: camera.position.clone() };
     camera.position.copy(house.seat.at);
     camera.rotation.set(-0.3, house.seat.yaw, 0, 'YXZ');
-    say('Ti siedi. Il fuoco scoppietta. (WASD per alzarti)');
+    say('Ti siedi. Il fuoco scoppietta. (E sul libro per leggere, WASD per alzarti)');
+  } else if (key === 'libro') {
+    startReading(0);
+  } else if (key === 'libreria' || key === 'libri') {
+    openShelf();
   } else if (key === 'letto' && lastKey === 'letto' && !sleeping) {
     sleeping = 0.0001;
   } else say(CASA_INSPECT[key] ?? '');
   lastKey = key;
 }
+
+/** Daylight indoors, by time of day (enough to read by, except at dawn and dusk). */
+const i3 = (i: number) => [0.45, 1.0, 1.0, 0.35, 0][i];
 
 // ------------------------------------------------------------------ loop
 
@@ -308,7 +366,7 @@ function frame(): void {
     for (const m of f.def.flames) m.visible = f.lit;
     // a flame never holds still: two or three rhythms that never line up
     const flick = 1 + Math.sin(t * 9.3 + f.def.at.x) * 0.06 + Math.sin(t * 23.1 + f.def.at.z) * 0.04 + (fire ? Math.sin(t * 3.7) * 0.08 : 0);
-    const base = fire ? (p.night ? 5 : 1.4) : 1.3;
+    const base = fire ? (p.night ? 3.6 : 1.4) : 1.3;
     f.light.intensity = f.lit ? base * flick : 0;
     // only the flames on your floor cast shadows (the others cannot reach you anyway)
     f.light.castShadow = f.lit && (fire || f.def.level === level);
@@ -339,6 +397,16 @@ function frame(): void {
       lastKey = '';
     }
   }
+  if (reader.isOpen) {
+    // light on the page: daylight from the windows plus every flame, by its distance
+    let l = p.night ? 0.05 : i3(preset);
+    for (const f of flames) {
+      if (!f.lit) continue;
+      const d2 = Math.max(0.15, f.light.position.distanceToSquared(camera.position));
+      l += (f.light.intensity / d2) * (f.def.kind === 'fire' ? 0.18 : 0.5);
+    }
+    reader.setLight(l);
+  }
   crossT += dt;
   if (crossT > 0.15) {
     crossT = 0;
@@ -363,6 +431,9 @@ requestAnimationFrame(frame);
     camera.position.set(x, y + EYE, z);
     camera.rotation.set(THREE.MathUtils.degToRad(pitchDeg), THREE.MathUtils.degToRad(yawDeg), 0, 'YXZ');
     hud.intro.style.display = 'none';
+  },
+  read(i = 0) {
+    startReading(i);
   },
   sit() {
     camera.position.copy(house.seat.at);

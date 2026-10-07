@@ -17,6 +17,23 @@
       #time { position: fixed; right: 22px; top: 18px; font-style: italic; text-shadow: 0 1px 3px #000; color: #e8dfc8; }
       #toast { position: fixed; left: 50%; bottom: 8%; transform: translateX(-50%); max-width: 640px; padding: 0.8em 1.2em; background: rgba(28, 24, 20, 0.78); border: 1px solid rgba(201, 191, 166, 0.3); border-radius: 4px; line-height: 1.45; opacity: 0; transition: opacity 0.8s; }
       #toast.show { opacity: 1; }
+      /* reading: an open book over the scene, lit by the candle */
+      #reader { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(10, 6, 2, 0.15), rgba(10, 6, 2, 0.75)); }
+      #reader.open { display: flex; }
+      #reader .book { display: flex; gap: 0; filter: brightness(var(--light, 1)) sepia(var(--warm, 0.1)); transform: perspective(1400px) rotateX(14deg); box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6); border-radius: 4px; }
+      #reader .page { width: min(36vw, 400px); height: min(70vh, 560px); box-sizing: border-box; padding: 50px 44px 40px; background: #efe3c4; color: #2e2218; font-size: 17px; line-height: 1.55; position: relative; white-space: pre-wrap; overflow: hidden; }
+      #reader .page.left { border-radius: 4px 0 0 4px; background: linear-gradient(to left, rgba(110, 80, 40, 0.3), rgba(110, 80, 40, 0) 14%), radial-gradient(circle at 20% 80%, rgba(160, 110, 60, 0.1), transparent 12%), radial-gradient(circle at 75% 15%, rgba(160, 110, 60, 0.08), transparent 8%), radial-gradient(ellipse at center, #f0e4c6, #e4d2a8); }
+      #reader .page.right { border-radius: 0 4px 4px 0; background: linear-gradient(to right, rgba(110, 80, 40, 0.3), rgba(110, 80, 40, 0) 14%), radial-gradient(circle at 65% 70%, rgba(160, 110, 60, 0.09), transparent 10%), radial-gradient(ellipse at center, #f0e4c6, #e4d2a8); }
+      #reader .page .text::first-letter { float: left; font-size: 3.1em; line-height: 0.9; margin: 0.06em 0.08em 0 0; color: #7a2a1e; }
+      #reader .page::after { content: attr(data-n); position: absolute; bottom: 16px; left: 0; right: 0; text-align: center; font-size: 12px; color: #7a6a52; }
+      #reader .head { position: absolute; top: 18px; left: 0; right: 0; text-align: center; font-style: italic; font-size: 12px; color: #7a6a52; }
+      #reader .hint { position: fixed; bottom: 4%; left: 0; right: 0; text-align: center; color: #c9bfa6; font-style: italic; text-shadow: 0 1px 3px #000; }
+      #shelf { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(10, 6, 2, 0.55); }
+      #shelf.open { display: flex; }
+      #shelf ul { list-style: none; padding: 1.4em 2em; margin: 0; background: rgba(28, 22, 16, 0.85); border: 1px solid rgba(201, 191, 166, 0.3); border-radius: 4px; }
+      #shelf li { padding: 0.45em 0.2em; }
+      #shelf li b { font-weight: normal; color: #e2c27a; margin-right: 0.6em; }
+      #shelf li span { color: #9a8f78; font-style: italic; font-size: 0.9em; margin-left: 0.6em; }
     </style>
   </head>
   <body>
@@ -24,6 +41,8 @@
     <div id="cross"></div>
     <div id="time"></div>
     <div id="toast"></div>
+    <div id="reader"><div class="book"><div class="page left"></div><div class="page right"></div></div><div class="hint">A / D per voltare pagina · E per chiudere il libro</div></div>
+    <div id="shelf"><ul></ul></div>
     <div id="intro">
       <h1>La casa</h1>
       <p>WASD per camminare · il mouse per guardare · E per osservare, accendere, sedersi, dormire</p>
