@@ -8,6 +8,7 @@ export default defineConfig({
       input: {
         main: resolve(import.meta.dirname, 'index.html'),
         bottega: resolve(import.meta.dirname, 'bottega.html'),
+        stile: resolve(import.meta.dirname, 'stile.html'),
       },
     },
   },
