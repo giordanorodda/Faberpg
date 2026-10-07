@@ -3,8 +3,8 @@ import { makeRng } from '../core/rng';
 import * as F from './fantasy';
 import * as P from './props';
 import { box, inspectable, MAT, shadowed } from './props';
+import { phMaterial, place, topOf } from './ph';
 import { wonkify } from './style';
-import { material, texSet } from './textures';
 
 /** Room size in meters. The front wall (with door and window) faces south, towards +z. */
 export const ROOM = { w: 7, d: 5.5, h: 3.1, wall: 0.35 };
@@ -113,13 +113,12 @@ export function buildRoom(): Room {
     colliders.push({ minX: cx - sx / 2, maxX: cx + sx / 2, minZ: cz - sz / 2, maxZ: cz + sz / 2 });
 
   // --- floor, walls, ceiling
-  const floorTex = texSet('floor', [w / 1.2, d / 2.4]);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), material(floorTex, { bump: 2.5 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), phMaterial('old_wood_floor', [w / 2.2, d / 2.2]));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   group.add(floor);
 
-  const wallMat = material(texSet('plaster'), { bump: 1.2 });
+  const wallMat = phMaterial('painted_plaster_wall', [0.8, 0.8], { color: 0xf2e2c4 }); // limewash, warm
   const front: Opening[] = [
     { x0: -2.4, x1: -0.9, y0: 0.9, y1: 2.15 },
     { x0: 1.05, x1: 2.15, y0: 0, y1: 2.25 },
@@ -155,7 +154,7 @@ export function buildRoom(): Room {
   }
 
   // half-timbered walls on a stone plinth
-  const plinthMat = material(texSet('plinth'), { bump: 2 });
+  const plinthMat = phMaterial('old_stone_wall', [0.3, 0.3]);
   const frontLocal = front.map((o) => ({ ...o, x0: -o.x1, x1: -o.x0 }));
   const frames: [number, number, number, number, number, typeof front][] = [
     // length, x, z, rotationY, (unused), openings in frame-local coordinates
@@ -171,8 +170,7 @@ export function buildRoom(): Room {
     group.add(fr);
   }
 
-  const ceilTex = texSet('ceiling', [w / 1.6, d / 3]);
-  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(w + wall * 2, d + wall * 2), material(ceilTex));
+  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(w + wall * 2, d + wall * 2), phMaterial('old_wood_floor', [w / 2.2, d / 2.2], { color: 0x9a8070 }));
   ceiling.rotation.x = Math.PI / 2;
   ceiling.position.y = h;
   ceiling.receiveShadow = true;
@@ -190,7 +188,7 @@ export function buildRoom(): Room {
   }
 
   // threshold stone at the door
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.03, wall + 0.1), material(texSet('threshold', [1, 0.4])));
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.03, wall + 0.1), phMaterial('old_stone_wall', [0.5, 0.2]));
   sill.position.set(1.6, 0.015, d / 2 + wall / 2);
   sill.receiveShadow = true;
   group.add(sill);
@@ -267,21 +265,17 @@ export function buildRoom(): Room {
       x += 0.2 + rnd() * 0.04;
     }
   }
-  // bottles, top right shelves
+  // scanned wine bottles on the upper shelves; the dark one nobody buys stays on top
   for (let level = 2; level < 4; level++) {
-    let x = shelfX0 + 0.2;
-    while (x < shelfX0 + 2.2) {
-      const b = P.bottle(level * 31 + Math.floor(x * 77));
-      b.position.set(x, shelfLevels[level] + 0.018, shelfZ + (rnd() - 0.5) * 0.08);
-      group.add(inspectable(b, 'bottiglie'));
-      x += 0.12 + rnd() * 0.06;
+    for (let k = 0; k < 4; k++) {
+      place(group, 'wine_bottles_01', { at: [shelfX0 + 0.35 + k * 0.5, shelfLevels[level] + 0.018, shelfZ], rotY: k * 1.7 + level, inspect: 'bottiglie' });
     }
   }
-  // the dark bottle nobody buys, on the top shelf
   const odd = P.bottle(7);
   odd.scale.setScalar(1.25);
   odd.position.set(shelfX0 + 0.5, shelfLevels[4] + 0.018, shelfZ);
   group.add(inspectable(odd, 'bottiglie'));
+  place(group, 'vintage_oil_lamp', { at: [shelfX0 + 3.6, shelfLevels[4] + 0.018, shelfZ], rotY: 0.4, inspect: 'lampada' });
   // candles, cloth, thread on the right half
   for (let i = 0; i < 4; i++) {
     const c = P.candleBundle();
@@ -327,7 +321,19 @@ export function buildRoom(): Room {
   group.add(inspectable(bl, 'campanello'));
   const cs = P.candlestick();
   cs.group.position.set(-1.1, ctrTop, -1.3);
+  cs.group.visible = false; // only its flame is used, on top of the scanned candlestick
   group.add(cs.group);
+  place(group, 'wooden_candlestick', { at: [-1.1, ctrTop, -1.3], rotY: 0.3 }).then((obj) => {
+    cs.group.visible = true;
+    cs.group.traverse((o) => {
+      if (o !== cs.flame && o !== cs.group) o.visible = false;
+    });
+    cs.flame.position.y = topOf(obj) - ctrTop + 0.012;
+  });
+  // crockery on the counter and the shelves
+  place(group, 'jug_01', { at: [-2.15, ctrTop, -1.35], rotY: 2.2 });
+  place(group, 'wooden_bowl_01', { at: [-1.55, ctrTop, -1.2], rotY: 0.4 });
+  place(group, 'ceramic_pot', { at: [shelfX0 + 2.45, shelfLevels[0] + 0.018, shelfZ], rotY: 1 });
   for (let i = 0; i < 3; i++) {
     const j = P.jar(300 + i, 0.18);
     j.position.set(-2.55 + i * 0.17, ctrTop, -1.3);
@@ -335,9 +341,7 @@ export function buildRoom(): Room {
   }
 
   // behind the counter
-  const st = P.stool();
-  st.position.set(0.4, 0, -1.85);
-  group.add(inspectable(st, 'sgabello'));
+  place(group, 'folding_wooden_stool', { at: [0.4, 0, -1.85], rotY: 0.5, inspect: 'sgabello' });
   addCollider(0.4, -1.85, 0.36, 0.36);
 
   // sacks and barrels along the west wall
@@ -354,29 +358,17 @@ export function buildRoom(): Room {
     group.add(inspectable(s, 'sacchi'));
     addCollider(x, z, 0.55, 0.55);
   });
-  const barrels: [number, number][] = [
-    [-3.0, 2.2],
-    [-2.4, 2.35],
-  ];
-  for (const [x, z] of barrels) {
-    const b = P.barrel();
-    b.position.set(x, 0, z);
-    group.add(inspectable(b, 'botte'));
-    addCollider(x, z, 0.65, 0.65);
-  }
-  const crates = P.crate(0.6, 0.4, 0.45);
-  crates.position.set(3.0, 0, 1.9);
-  crates.rotation.y = 0.2;
-  group.add(crates);
-  const crate2 = P.crate(0.5, 0.32, 0.4);
-  crate2.position.set(3.0, 0.4, 1.9);
-  crate2.rotation.y = -0.1;
-  group.add(crate2);
-  addCollider(3.0, 1.9, 0.75, 0.65);
+  // scanned barrels and crates (Poly Haven)
+  place(group, 'wine_barrel_01', { at: [-3.0, 0, 2.2], rotY: 0.4, inspect: 'botte' });
+  place(group, 'wine_barrel_01', { at: [-2.35, 0, 2.35], rotY: 2.6, inspect: 'botte' });
+  addCollider(-3.0, 2.2, 0.65, 0.65);
+  addCollider(-2.35, 2.35, 0.65, 0.65);
+  place(group, 'wooden_crate_01', { at: [3.0, 0, 1.9], rotY: 0.2 });
+  place(group, 'wooden_crate_02', { at: [2.95, 0, 2.45], rotY: -0.15 });
+  addCollider(3.0, 2.15, 0.75, 1.2);
+  place(group, 'wooden_bucket_01', { at: [2.55, 0, 2.35], rotY: 0.6 });
 
-  const br = P.broom();
-  br.position.set(3.3, 0, 0.8);
-  group.add(inspectable(br, 'scopa'));
+  place(group, 'wooden_broom', { at: [3.32, 0, 0.8], rotZ: 0.12, rotY: 1.2, inspect: 'scopa' });
 
   // the sign hangs on the front of the counter, right where customers stand
   const sg = P.sign('Si guarda con gli occhi.');
@@ -405,14 +397,18 @@ export function buildRoom(): Room {
   ladder.rotation.x = -0.14;
   group.add(ladder);
   addCollider(1.95, -2.1, 0.5, 0.25);
-  const apples = P.basket(71, 'mele');
-  apples.position.set(-2.45, 0, 0.9);
-  group.add(inspectable(apples, 'mele'));
-  addCollider(-2.45, 0.9, 0.42, 0.42);
-  const onions = P.basket(72, 'cipolle');
-  onions.position.set(-2.25, 0, 1.45);
-  group.add(inspectable(onions, 'cipolle'));
-  addCollider(-2.25, 1.45, 0.42, 0.42);
+  // wicker baskets with scanned apples
+  for (const [name, x, z] of [['wicker_basket_01', -2.45, 0.9], ['wicker_basket_02', -2.25, 1.5]] as const) {
+    place(group, name, { at: [x, 0, z], rotY: x * 3, inspect: 'mele' }).then((basket) => {
+      const top = topOf(basket);
+      for (let i = 0; i < 7; i++) {
+        const a = i * 2.4;
+        const r = i === 0 ? 0 : 0.07;
+        place(group, 'food_apple_01', { at: [x + Math.cos(a) * r, top - 0.06 + (i === 0 ? 0.03 : 0), z + Math.sin(a) * r], rotY: i, inspect: 'mele' });
+      }
+    });
+    addCollider(x, z, 0.45, 0.45);
+  }
   for (let i = 0; i < 3; i++) {
     const b = P.braid(90 + i, i !== 1);
     b.position.set(-w / 2 + 0.14, 2.55, 1.5 + i * 0.32);
@@ -468,11 +464,11 @@ export function buildRoom(): Room {
   group.add(inspectable(rope, 'corda'));
   addCollider(3.1, 1.1, 0.3, 0.3);
   const lan = F.lantern();
-  lan.position.set(2.95, 0.72, 1.85);
+  lan.position.set(2.5, 0, 1.6);
   group.add(inspectable(lan, 'lanterna'));
 
   // Everything a little crooked, as if built by hand.
-  wonkify(group);
+  wonkify(group, 0.5);
 
   return {
     group,
@@ -492,57 +488,16 @@ export function buildRoom(): Room {
 /** What is seen through the door and the windows: the street, the square, the trees. */
 export function buildOutside(): THREE.Group {
   const g = new THREE.Group();
-  const grass = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x5f8a44, roughness: 1 }));
+  const grass = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), phMaterial('leafy_grass', [80, 80]));
   grass.rotation.x = -Math.PI / 2;
   grass.position.y = -0.02;
   grass.receiveShadow = true;
   g.add(grass);
-  const road = new THREE.Mesh(new THREE.PlaneGeometry(60, 3.2), new THREE.MeshStandardMaterial({ color: 0xa48a62, roughness: 1 }));
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(60, 3.2), phMaterial('stony_dirt_path', [20, 1.1]));
   road.rotation.x = -Math.PI / 2;
   road.position.set(0, -0.01, ROOM.d / 2 + 3.2);
   road.receiveShadow = true;
   g.add(road);
-  // the tavern across the road
-  const plasterMat = new THREE.MeshStandardMaterial({ color: 0xd8ccb0, roughness: 1 });
-  const roofMat = new THREE.MeshStandardMaterial({ color: 0x9a4a32, roughness: 0.9 });
-  const house = (x: number, z: number, w: number, d: number, hh: number) => {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(w, hh, d), plasterMat);
-    body.position.set(x, hh / 2, z);
-    const roofGeo = new THREE.CylinderGeometry(0.01, d * 0.72, w + 0.6, 4, 1);
-    const roof = new THREE.Mesh(roofGeo, roofMat);
-    roof.rotation.z = Math.PI / 2;
-    roof.rotation.x = Math.PI / 4;
-    roof.scale.set(1, 1, 0.55);
-    roof.position.set(x, hh + d * 0.2, z);
-    const doorM = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 2.0), new THREE.MeshStandardMaterial({ color: 0x5a3c22 }));
-    doorM.position.set(x, 1.0, z - d / 2 - 0.01);
-    doorM.rotation.y = Math.PI;
-    return shadowed(new THREE.Group().add(body, roof, doorM));
-  };
-  g.add(house(-1, ROOM.d / 2 + 10, 9, 5, 3.4));
-  g.add(house(10, ROOM.d / 2 + 8, 5, 5, 3));
-  // trees
-  const rnd = makeRng(3);
-  const leaf = new THREE.MeshStandardMaterial({ color: 0x3f6a32, roughness: 1, flatShading: true });
-  const trunk = new THREE.MeshStandardMaterial({ color: 0x5a4028, roughness: 1 });
-  for (let i = 0; i < 26; i++) {
-    const x = -30 + rnd() * 60;
-    const z = ROOM.d / 2 + 14 + rnd() * 25;
-    if (Math.abs(x) < 6 && z < ROOM.d / 2 + 14) continue;
-    const t = new THREE.Group();
-    const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.22, 2.2, 6), trunk);
-    tr.position.y = 1.1;
-    const cr = new THREE.Mesh(new THREE.IcosahedronGeometry(1.4 + rnd() * 0.8, 0), leaf);
-    cr.position.y = 3 + rnd() * 0.6;
-    t.add(tr, cr);
-    t.position.set(x, 0, z);
-    g.add(shadowed(t));
-  }
-  // east side: a hedge and the start of the meadow
-  for (let i = 0; i < 6; i++) {
-    const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 0), leaf);
-    b.position.set(ROOM.w / 2 + 4 + rnd(), 0.5, -3 + i * 1.3);
-    g.add(shadowed(b));
-  }
+  // Beyond the road, the panoramic photo takes over (see main.ts).
   return g;
 }

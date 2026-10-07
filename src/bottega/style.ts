@@ -99,8 +99,8 @@ export const gradeShader = {
     void main(){
       vec3 c = texture2D(tDiffuse, vUv).rgb;
       float l = dot(c, vec3(0.299, 0.587, 0.114));
-      c = mix(vec3(l), c, 1.18);
-      c *= mix(vec3(0.86, 0.86, 1.06), vec3(1.06, 1.0, 0.9), smoothstep(0.05, 0.75, l));
+      c = mix(vec3(l), c, 0.95);
+      c *= mix(vec3(0.94, 0.95, 1.02), vec3(1.04, 1.0, 0.94), smoothstep(0.05, 0.75, l));
       vec2 d = vUv - 0.5;
       c *= 1.0 - dot(d, d) * 0.6;
       c += (rand(vUv * 1000.0 + time) - 0.5) * 0.02;

@@ -88,3 +88,7 @@ npm run shot       # screenshot automatici (con npm run dev acceso)
 4. Una prima forma di housing (§20): oggetti da sistemare in casa, con valore affettivo.
 5. Riscrivere i dialoghi e approfondire gli abitanti; il primo sistema di memoria degli NPC (§33).
 6. Seconda fase (§29): il bosco profondo oltre il fosso, il primo combattimento, la prima rovina.
+
+### Asset fotografati (prova realistica)
+
+Modelli, texture e panorami vengono da [Poly Haven](https://polyhaven.com) e sono CC0 (pubblico dominio). Stanno in `public/assets/ph/`; per riscaricarli o aggiungerne: `python3 scripts/fetch-polyhaven.py`.

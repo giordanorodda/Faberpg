@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeRng } from '../core/rng';
+import { phMaterial } from './ph';
 import { material, texSet, writing } from './textures';
 
 /**
@@ -11,12 +12,12 @@ import { material, texSet, writing } from './textures';
  */
 
 export const MAT = {
-  darkWood: material(texSet('woodDark'), { bump: 1 }),
-  midWood: material(texSet('woodMid'), { bump: 1 }),
-  paleWood: material(texSet('woodPale'), { bump: 1 }),
+  darkWood: phMaterial('rough_wood', [1, 1], { color: 0x8a6650 }),
+  midWood: phMaterial('wood_table_worn', [0.6, 0.6]),
+  paleWood: phMaterial('kitchen_wood', [0.6, 0.6]),
   brass: new THREE.MeshStandardMaterial({ color: 0xc8a050, metalness: 1, roughness: 0.32 }),
   iron: new THREE.MeshStandardMaterial({ color: 0x2c2a28, metalness: 0.85, roughness: 0.6 }),
-  burlap: material(texSet('burlap', [2, 2]), { bump: 2 }),
+  burlap: phMaterial('rough_linen', [3, 2], { color: 0xa47e52 }),
   flour: new THREE.MeshStandardMaterial({ color: 0xf2ece0, roughness: 1 }),
   paper: new THREE.MeshStandardMaterial({ color: 0xe9dfc6, roughness: 0.95 }),
   wax: new THREE.MeshStandardMaterial({ color: 0xefe6cf, roughness: 0.6 }),
@@ -270,7 +271,21 @@ export function sack(seed: number, open = false): THREE.Group {
         [r * 0.32, h * 1.08],
         [0, h * 1.1],
       ];
-  const body = lathe(profile, MAT.burlap, 18);
+  const body = lathe(profile, MAT.burlap, 28);
+  body.geometry = new THREE.LatheGeometry(profile.map(([pr, py]) => new THREE.Vector2(pr, py)), 28, 0, Math.PI * 2);
+  // A sack is never a vase: lumpy where the grain presses, slumped to one side.
+  const pos = body.geometry.attributes.position as THREE.BufferAttribute;
+  const lean = (rnd() - 0.5) * 0.12;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const a = Math.atan2(z, x);
+    const lump = 1 + 0.06 * Math.sin(a * 3 + seed) * Math.sin(y * 9 + seed) + 0.04 * Math.sin(a * 7 + y * 13);
+    const slump = 1 + 0.12 * Math.max(0, 0.35 - y) * 2; // bulges at the bottom
+    pos.setXYZ(i, x * lump * slump + lean * y, y * (1 - 0.04 * Math.cos(a * 2)), z * lump * slump);
+  }
+  body.geometry.computeVertexNormals();
   body.scale.set(1, 1, 0.85 + rnd() * 0.1);
   body.material = MAT.burlap;
   (body.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;

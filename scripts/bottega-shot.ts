@@ -23,15 +23,17 @@ const shots: [string, string, number, number, number, number][] = [
   ['b8-bancone-tramonto', 'tramonto', 0.1, -0.35, 15, -42],
   ['b9-parete-ovest', 'mattina', 0.6, 0.6, 90, 2],
 ];
+const only = process.env.SHOTS?.split(',');
 for (const [name, ora, x, z, yaw, pitch] of shots) {
+  if (only && !only.includes(name)) continue;
   const t0 = Date.now();
   await page.goto(`${base}bottega.html?ora=${ora}`, { waitUntil: 'domcontentloaded', timeout: 180000 });
   await page.waitForFunction(() => 'bottega' in window, null, { timeout: 180000 });
   console.log('loaded in', Date.now() - t0, 'ms');
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(Number(process.env.SHOT_WAIT ?? 8000)); // models and panoramas load asynchronously
   await page.evaluate(([x, z, yaw, pitch]) => (window as unknown as { bottega: { view(...a: number[]): void } }).bottega.view(x, z, yaw, pitch), [x, z, yaw, pitch]);
   await page.waitForTimeout(2500);
-  await page.screenshot({ path: `${out}/${name}.png` });
+  await page.screenshot({ path: `${out}/${name}.png`, timeout: 240000 });
   console.log('ok', name);
 }
 await browser.close();

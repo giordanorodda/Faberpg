@@ -209,15 +209,18 @@ function applyPreset(i: number): void {
   // At night the "sun" is the moon, and the sky dome is replaced by a deep blue.
   skyU.sunPosition.value.copy(night ? new THREE.Vector3(0, -1, 0) : dirToSun);
   skyU.turbidity.value = p.turbidity;
-  sky.visible = !night;
-  scene.background = night ? new THREE.Color(0x0a1022) : null;
-  hemi.intensity = 0.9 * p.sky + 0.04;
+  sky.visible = false;
+  const pano = panoramas[i === 3 || i === 0 ? 'evening_field' : 'dry_orchard_meadow'];
+  scene.background = night || !pano ? new THREE.Color(0x0a1022) : pano.bg;
+  scene.environment = night || !pano ? null : pano.env;
+  scene.backgroundIntensity = i === 3 || i === 0 ? 0.5 : 0.8;
+  hemi.intensity = 0.55 * p.sky + 0.03;
   hemi.color.setHex(night ? 0x34406a : 0xa8b4e8);
   for (const s of skyLights) {
     s.light.intensity = 7 * p.sky;
     s.light.color.setHex(night ? 0x5a6a9a : i === 3 || i === 0 ? 0xffc8a0 : 0xcfe0f0);
   }
-  bounce.intensity = 2.2 * p.sky;
+  bounce.intensity = 1.6 * p.sky;
   bounce.color.setHex(i === 3 ? 0xffb080 : 0xffd8a8);
   lamp.intensity = p.lamps ? (night ? 7 : 4) : 0;
   candle.intensity = p.lamps ? 1.6 : 0;
@@ -232,7 +235,8 @@ function applyPreset(i: number): void {
   shaftMat.uniforms.color.value.setHex(p.sunColor);
   dustMat.opacity = night ? 0.08 : 0.45;
   rebuildShafts(dirToSun);
-  scene.fog = new THREE.Fog(night ? 0x0a1022 : i === 3 ? 0xd09070 : 0xb8c8d8, 25, 120);
+  // a light haze in the air: dust and smoke make interiors feel deep
+  scene.fog = new THREE.FogExp2(night ? 0x0c0a10 : i === 3 ? 0x6a4232 : 0x7a6450, night ? 0.04 : 0.028);
   hud.time.textContent = p.name;
 }
 
@@ -277,6 +281,8 @@ const setOutlineSize = () => {
   outline.uniforms.resolution.value.set(window.innerWidth * pr, window.innerHeight * pr);
 };
 setOutlineSize();
+// Ink outlines belong to the painted style; the realistic look leaves them out.
+outline.enabled = false;
 composer.addPass(outline);
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.25, 0.5, 0.92);
 composer.addPass(bloom);
@@ -285,13 +291,17 @@ composer.addPass(new OutputPass());
 const film = new ShaderPass(gradeShader);
 composer.addPass(film);
 
-// Reflections from a real panoramic photo (Poly Haven, CC0): brass, glass and varnish catch real light.
-new HDRLoader().load(`${import.meta.env.BASE_URL}env/quarry_01_1k.hdr`, (hdr) => {
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromEquirectangular(hdr).texture;
-  hdr.dispose();
-  pmrem.dispose();
-});
+// What is seen outside, and the reflections inside, come from real panoramic
+// photos (Poly Haven, CC0): a meadow with an orchard by day, a field at sunset.
+const panoramas: Record<string, { bg: THREE.Texture; env: THREE.Texture }> = {};
+const pmrem = new THREE.PMREMGenerator(renderer);
+for (const name of ['dry_orchard_meadow', 'evening_field']) {
+  new HDRLoader().load(`${import.meta.env.BASE_URL}assets/ph/hdri/${name}_2k.hdr`, (hdr) => {
+    hdr.mapping = THREE.EquirectangularReflectionMapping;
+    panoramas[name] = { bg: hdr, env: pmrem.fromEquirectangular(hdr).texture };
+    applyPreset(presetIndex);
+  });
+}
 
 let postEnabled = true;
 
@@ -327,7 +337,6 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyE') inspect();
   if (e.code === 'KeyO') {
     gtao.enabled = !gtao.enabled;
-    outline.enabled = gtao.enabled; // the outlines read the AO pass's depth and normals
     say(gtao.enabled ? 'Occlusione ambientale: accesa.' : 'Occlusione ambientale: spenta.');
   }
   if (e.code === 'KeyP') {
