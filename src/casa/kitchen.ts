@@ -90,7 +90,7 @@ export function gatheredCurtain(width: number, height: number, map: THREE.Textur
 }
 
 /** A copper saucepan hanging by its handle. Hangs from y = 0. */
-function saucepan(r: number, seed: number): THREE.Group {
+export function saucepan(r: number, seed: number): THREE.Group {
   const g = new THREE.Group();
   const pan = new THREE.Group();
   pan.add(lathe([[0, 0], [r * 0.95, 0.002], [r, r * 0.9], [r * 1.04, r * 0.95], [r * 0.98, r * 0.95], [r * 0.93, 0.01], [0, 0.01]], copper, 32));
@@ -138,7 +138,7 @@ function utensil(kind: 'ladle' | 'skimmer' | 'spoon'): THREE.Group {
 }
 
 /** A jar of preserves with a checked cloth cap tied on with string. */
-function preserve(seed: number, fill: number): THREE.Group {
+export function preserve(seed: number, fill: number): THREE.Group {
   const rnd = makeRng(seed);
   const g = new THREE.Group();
   const h = 0.13 + rnd() * 0.06;

@@ -1069,6 +1069,17 @@ export function clothesChair(): THREE.Group {
   return shadowed(g);
 }
 
+/** A turned wooden prop, wedged under a sagging shelf. From y = 0 up to 0.37. */
+export function lathePost(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(lathe([[0, 0], [0.035, 0], [0.03, 0.03], [0.02, 0.08], [0.026, 0.18], [0.018, 0.3], [0.03, 0.34], [0.03, 0.36], [0, 0.36]], M.woodPale, 14));
+  const wedge = rbox(0.08, 0.012, 0.05, M.wood, 0.003);
+  wedge.position.y = 0.366;
+  wedge.rotation.z = 0.06;
+  g.add(wedge);
+  return shadowed(g);
+}
+
 /** A small round table on three legs, by the armchair. */
 export function sideTable(): THREE.Group {
   const g = new THREE.Group();
@@ -1180,7 +1191,9 @@ export function bookshelf(width: number, height: number, extras: (shelf: number,
   const levels = [0.08, 0.5, 0.9, 1.3, height - 0.03];
   const rnd = makeRng(33);
   levels.forEach((y, li) => {
-    const sh = bentBox(width, 0.03, D, M.wood, li < levels.length - 1 ? 0.012 : 0.003, 0);
+    // the third shelf bows more than the others: it holds the heavy books
+    const sagAmt = li === 2 ? 0.03 : li < levels.length - 1 ? 0.012 : 0.003;
+    const sh = bentBox(width, 0.03, D, M.wood, sagAmt, 0);
     sh.rotation.y = Math.PI / 2;
     sh.position.set(D / 2, y, 0);
     g.add(sh);
@@ -1191,7 +1204,7 @@ export function bookshelf(width: number, height: number, extras: (shelf: number,
     while (z < width / 2 - 0.05) {
       const r = rnd();
       // the sag of the board at this point
-      const sag = 0.012 * Math.sin(((z + width / 2) / width) * Math.PI);
+      const sag = sagAmt * Math.sin(((z + width / 2) / width) * Math.PI);
       const base = y + 0.015 - sag;
       if (r < 0.06) {
         z += 0.06 + rnd() * 0.1; // a gap

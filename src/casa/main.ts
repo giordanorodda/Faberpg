@@ -9,6 +9,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { CASA_INSPECT } from '../data/casa';
 import { LIBRI } from '../data/libri';
 import { buildCountryside, buildSky } from '../stile/sky';
+import { ANNEX, ANNEX_DOOR, ANNEX_USES, type AnnexUse } from './annex';
 import { Carry } from './carry';
 import { tickFlames } from './furniture';
 import { Rain, rainyToday, Steam } from './living';
@@ -121,6 +122,10 @@ const dirOf = (az: number, el: number) => {
   const e = THREE.MathUtils.degToRad(el);
   return new THREE.Vector3(Math.sin(a) * Math.cos(e), Math.sin(e), -Math.cos(a) * Math.cos(e));
 };
+/** The lantern in the room beyond burns only once the room is in use. */
+function annexLantern(): void {
+  for (const f of flames) if (f.def.key === 'lanterna:stanza' && progress.annex !== 'clean') f.lit = false;
+}
 const grey = (hex: number, k: number, to = 0x8a9098) => new THREE.Color(hex).lerp(new THREE.Color(to), k).getHex();
 function applyPreset(i: number): void {
   preset = i;
@@ -154,6 +159,7 @@ function applyPreset(i: number): void {
   renderer.toneMappingExposure = p.exposure;
   // the candles are lit at dusk and at night, and put out in the day
   for (const f of flames) if (f.def.kind === 'candle') f.lit = p.night || i === 3;
+  annexLantern();
   hud.time.textContent = p.name;
 }
 
@@ -224,9 +230,18 @@ const reader = new Reader();
 const shelfEl = document.getElementById('shelf')!;
 let choosing = false;
 function openShelf(): void {
+  const mend = progress.toolbox && !progress.shelf;
   openChoice(
-    LIBRI.map((b) => ({ title: b.titolo, note: b.nota })),
-    (i) => startReading(i),
+    [...LIBRI.map((b) => ({ title: b.titolo, note: b.nota })), ...(mend ? [{ title: 'Rinforzare il terzo scaffale', note: 'con gli attrezzi della cassapanca' }] : [])],
+    (i) => {
+      if (i < LIBRI.length) startReading(i);
+      else
+        passTime(() => {
+          progress.shelf = true;
+          applyProgress();
+          memory.touch();
+        }, 'Togli i libri, tagli un puntello da un ceppo di faggio, lo torni alla meglio e lo infili sotto lo scaffale con un cuneo. Rimetti i libri. Non piega più. Quasi.');
+    },
   );
 }
 function closeShelf(): void {
@@ -295,7 +310,15 @@ const R = 0.25;
 let floorY = 0;
 function floorAt(x: number, z: number, y: number): number | null {
   const { w, d } = HOUSE;
-  if (Math.abs(x) > w / 2 - R || Math.abs(z) > d / 2 - R) return null;
+  const inHouse = Math.abs(x) <= w / 2 - R && Math.abs(z) <= d / 2 - R;
+  // through the door at the foot of the stairs, once it is open, into the room beyond
+  const inDoor = progress.annex !== 'locked' && y < 0.3 && x > w / 2 - R - 0.01 && x < ANNEX.x0 + R && z > ANNEX_DOOR.z0 + R && z < ANNEX_DOOR.z1 - R;
+  const inAnnex = progress.annex !== 'locked' && y < 0.3 && x > ANNEX.x0 && x < ANNEX.x1 - R && z > ANNEX.z0 + R && z < ANNEX.z1 - R;
+  if (inDoor || inAnnex) {
+    if (house.colliders.some((c) => c.level === 0 && x > c.minX - R && x < c.maxX + R && z > c.minZ - R && z < c.maxZ + R)) return null;
+    return 0;
+  }
+  if (!inHouse) return null;
   const inStair = x < STAIR.x0 && x > STAIR.x1 && z < STAIR.z1;
   const options: number[] = [];
   if (inStair) options.push(THREE.MathUtils.clamp((STAIR.x0 - x) / (STAIR.x0 - STAIR.x1), 0, 1) * UP);
@@ -389,6 +412,43 @@ function say(text: string): void {
   toastTimer = window.setTimeout(() => hud.toast.classList.remove('show'), 7000);
 }
 // ------------------------------------------------------------------ the fire and the tea
+
+/** What has changed in the house over time: the room beyond the door, the mended shelf, what you carry. */
+const progress = {
+  annex: 'locked' as 'locked' | 'open' | 'clean',
+  use: null as AnnexUse | null,
+  keys: false,
+  toolbox: false,
+  shelf: false,
+};
+let doorOpen = 0;
+function applyProgress(): void {
+  if (progress.annex === 'clean' && progress.use) {
+    house.annex.clean();
+    house.annex.furnish(progress.use);
+  }
+  house.shelfProp.visible = progress.shelf;
+  if (progress.keys) house.group.traverse((o) => o.userData.inspect === 'chiavi' && (o.visible = false));
+}
+/** Time passes: the screen goes dark, the work is done, the light comes back. */
+function passTime(done: () => void, after: string): void {
+  const t0 = performance.now();
+  let did = false;
+  const step = () => {
+    const t = (performance.now() - t0) / 1000;
+    grade.uniforms.fade.value = Math.min(1, t / 1.2) - Math.max(0, (t - 2.6) / 1.2);
+    if (t > 1.3 && !did) {
+      did = true;
+      done();
+    }
+    if (t < 3.8) requestAnimationFrame(step);
+    else {
+      grade.uniforms.fade.value = 0;
+      say(after);
+    }
+  };
+  requestAnimationFrame(step);
+}
 
 /** 1 = a full load of wood, 0 = cold ashes. */
 let fireLevel = 1;
@@ -504,6 +564,34 @@ function interact(forced?: string): void {
     memory.touch();
   } else if (key === 'camino' && fireLevel <= 0.04) {
     say('Il fuoco è spento, la cenere è fredda. Ci vogliono i rametti del cesto (E sul cesto).');
+  } else if (key === 'chiavi' && !progress.keys) {
+    progress.keys = true;
+    applyProgress();
+    memory.touch();
+    say('Prendi il mazzo di chiavi. La quarta è più vecchia delle altre, e più pesante.');
+  } else if (key === 'porta-stanza') {
+    if (progress.annex !== 'locked') say(progress.annex === 'open' ? 'La porta della stanza di là. Dentro, polvere e cose di altri.' : CASA_INSPECT['porta-stanza']);
+    else if (!progress.keys) say('Una porta chiusa a chiave, in fondo alle scale. Nessuna delle chiavi che usi ogni giorno la apre.');
+    else {
+      progress.annex = 'open';
+      memory.touch();
+      sound.creak();
+      say('La quarta chiave gira, dopo un po\' di insistenza. La porta si apre su una stanza che nessuno apre da anni.');
+    }
+  } else if (key === 'polvere') {
+    openChoice(ANNEX_USES, (i) => {
+      const use = ANNEX_USES[i].id;
+      passTime(() => {
+        progress.annex = 'clean';
+        progress.use = use;
+        applyProgress();
+        memory.touch();
+      }, `Ci vuole tutto il pomeriggio: la scopa, tre secchi d'acqua, gli stracci, i teli portati fuori a sbattere. Le cose vecchie le metti da parte: qualcuna servirà. Quando hai finito, la stanza è ${use === 'dispensa' ? 'una dispensa' : use === 'laboratorio' ? 'un laboratorio' : 'uno studio'}, ed è tua.`);
+    });
+  } else if (key === 'cassapanca' && !progress.toolbox) {
+    progress.toolbox = true;
+    memory.touch();
+    say('Apri la cassapanca. Coperte, un maglione, e in fondo una cassetta di legno: gli attrezzi di chi abitava qui. Martello, chiodi, una sega piccola. Li prendi.');
   } else if (key === 'gatto') {
     say(house.cat.spot.line);
   } else say(CASA_INSPECT[key] ?? '');
@@ -547,6 +635,10 @@ function frame(): void {
   fireLevel = Math.max(0, fireLevel - dt / (3 * 3600));
   house.embers.emissiveIntensity = (0.15 + Math.min(1, fireLevel * 2)) * (1.0 + Math.sin(t * 2.3) * 0.25 + Math.sin(t * 5.7) * 0.1);
   updateTea(dt);
+  // the door of the room beyond swings open; its shutters open once it is clean
+  doorOpen += ((progress.annex !== 'locked' ? 1 : 0) - doorOpen) * Math.min(1, dt * 1.5);
+  house.annex.door.rotation.y = -doorOpen * Math.PI * 0.55;
+  for (const sh of house.annex.shutters) sh.rotation.y += (((progress.annex === 'clean' ? 1 : 0) * (sh.userData.side as number) * -1.9) - sh.rotation.y) * Math.min(1, dt * 2);
   kettleSteam.update(dt, t);
   cupSteam.update(dt, t);
   rain.update(dt);
@@ -626,14 +718,18 @@ house.cat.set(house.catSpots[['ciotola', 'panca', 'letto', 'poltrona', 'tappeto'
 const memory = new HouseMemory(
   house.movables,
   () => Object.fromEntries(flames.filter((f) => f.def.key).map((f) => [f.def.key!, f.lit])),
-  () => ({ fire: fireLevel }),
+  () => ({ fire: fireLevel, ...progress }),
 );
 if (!params.has('nuova')) {
   const saved = memory.restore();
   if (saved) {
     for (const f of flames) if (f.def.key && f.def.key in saved.candles) f.lit = saved.candles[f.def.key];
     // the fire has gone on burning while you were away, and may have gone out
-    const fire = Number(saved.extra?.fire ?? 1);
+    const ex = (saved.extra ?? {}) as Partial<typeof progress> & { fire?: number };
+    Object.assign(progress, { annex: ex.annex ?? 'locked', use: ex.use ?? null, keys: !!ex.keys, toolbox: !!ex.toolbox, shelf: !!ex.shelf });
+    applyProgress();
+    annexLantern();
+    const fire = Number(ex.fire ?? 1);
     const away = saved.savedAt ? (Date.now() - saved.savedAt) / 1000 : 0;
     fireLevel = Math.max(0, fire - away / (3 * 3600));
     if (fireLevel <= 0.04 && away > 600) window.setTimeout(() => say('Il fuoco si è spento mentre eri via. La casa sa di cenere fredda.'), 1500);
@@ -655,6 +751,7 @@ requestAnimationFrame(frame);
     interact(key);
     return hud.toast.textContent;
   },
+  progress,
   /** For tests: let time pass for the tea (headless rendering is too slow to wait). */
   tick(sec: number) {
     for (let k = 0; k < sec * 20; k++) updateTea(0.05);

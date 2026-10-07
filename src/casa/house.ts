@@ -10,6 +10,7 @@ import type { WallOptions } from '../stile/paint';
 import { flushBookAtlas, makeBook } from './books';
 import { Cat, type CatSpot } from './cat';
 import * as De from './details';
+import { type Annex, ANNEX_DOOR, buildAnnex } from './annex';
 import * as Fu from './furniture';
 import { buildKitchen, gatheredCurtain, KITCHEN_WINDOW } from './kitchen';
 
@@ -93,6 +94,9 @@ export interface House {
   teaSurface: THREE.Mesh;
   living: THREE.Object3D[];
   cat: Cat;
+  annex: Annex;
+  /** The prop that will hold up the third shelf, once it is mended. */
+  shelfProp: THREE.Object3D;
   catSpots: Record<string, CatSpot>;
   /** Where the armchair seat is, and which way it faces (yaw). */
   seat: { at: THREE.Vector3; yaw: number };
@@ -191,7 +195,7 @@ export function buildHouse(): House {
   }
   // east and west (under the eaves): u runs with z
   for (const [x, ops] of [
-    [W / 2 + WALL / 2, [winE]],
+    [W / 2 + WALL / 2, [winE, { z0: ANNEX_DOOR.z0, z1: ANNEX_DOOR.z1, y0: 0, y1: ANNEX_DOOR.y1 }]],
     [-W / 2 - WALL / 2, []],
   ] as const) {
     const here = ops.map((o) => ({ u0: o.z0 + D / 2, u1: o.z1 + D / 2, v0: o.y0, v1: o.y1 }));
@@ -223,13 +227,13 @@ export function buildHouse(): House {
     D / 2 - 0.012,
     Math.PI,
   );
-  skin({ w: D, h: H1, frieze: 2.2, holes: [{ x0: winE.z0 + D / 2, x1: winE.z1 + D / 2, y0: winE.y0, y1: winE.y1 }] }, 13, W / 2 - 0.012, 0, 0, -Math.PI / 2);
+  skin({ w: D, h: H1, frieze: 2.2, holes: [{ x0: winE.z0 + D / 2, x1: winE.z1 + D / 2, y0: winE.y0, y1: winE.y1 }, { x0: ANNEX_DOOR.z0 + D / 2, x1: ANNEX_DOOR.z1 + D / 2, y0: 0, y1: ANNEX_DOOR.y1 }] }, 13, W / 2 - 0.012, 0, 0, -Math.PI / 2);
   skin({ w: D, h: H1, frieze: 2.2, patches: [{ x: 4.3, y: 0.6, r: 0.13 }] }, 14, -W / 2 + 0.012, 0, 0, Math.PI / 2);
   // timber framing on a stone plinth, as in the shop
   const southLocal = [doorS, winS].map((o) => ({ x0: -o.x1, x1: -o.x0, y0: o.y0, y1: o.y1 }));
   for (const [len, x, z, ry, ops] of [
     [W, 0, D / 2, Math.PI, southLocal],
-    [D, W / 2, 0, -Math.PI / 2, [{ x0: winE.z0, x1: winE.z1, y0: winE.y0, y1: winE.y1 }]],
+    [D, W / 2, 0, -Math.PI / 2, [{ x0: winE.z0, x1: winE.z1, y0: winE.y0, y1: winE.y1 }, { x0: ANNEX_DOOR.z0, x1: ANNEX_DOOR.z1, y0: 0, y1: ANNEX_DOOR.y1 }]],
     [D, -W / 2, 0, Math.PI / 2, [{ x0: -0.8, x1: 0.8, y0: 0, y1: H1 }]],
   ] as const) {
     const fr = F.timberFrame(len, H1, ops as never, stone);
@@ -895,6 +899,15 @@ export function buildHouse(): House {
     living.push(pot);
   }
 
+  // the room beyond the locked door, and its lantern (lit only once the room is in use)
+  const annex = buildAnnex(stone, colliders);
+  group.add(annex.group);
+  lights.push({ at: annex.lantern.at.clone().add(new THREE.Vector3(0, 0.06, 0)), level: 0, flames: [annex.lantern.flame], key: 'lanterna:stanza', kind: 'candle' });
+  // the third shelf, and the turned prop that will mend it
+  const shelfProp = Fu.lathePost();
+  shelfProp.position.set(-W / 2 + 0.13 + 0.15, 0.5 + 0.015, 1.78);
+  shelfProp.visible = false;
+  group.add(tag(shelfProp, 'supporto'));
   // the cat and the places of its day
   const seatAt0 = chairAt.clone();
   const fwd = new THREE.Vector3(Math.sin(chairYaw), 0, Math.cos(chairYaw));
@@ -927,6 +940,8 @@ export function buildHouse(): House {
     living,
     cat,
     catSpots,
+    annex,
+    shelfProp,
     seat: { at: seatAt, yaw: chairYaw + Math.PI },
     bedside: { at: new THREE.Vector3(-0.85, UP, 0.55), yaw: Math.PI * 0.6 },
   };
