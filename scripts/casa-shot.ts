@@ -34,6 +34,10 @@ const shots: [string, string, number | 'sit' | 'read', number, number, number, n
   ['d7-gatto', 'pomeriggio', -0.85, 1.65, 90, -58, UP],
   ['d8-gatto-basso', 'pomeriggio', -0.85, 1.35, 100, -38, UP],
   ['d9-gatto-vicino', 'pomeriggio', -1.05, 1.3, 125, -28, UP - 0.8],
+  ['k1-cucina', 'mattina', -0.9, 0.2, 55, -14, 0],
+  ['k2-madia', 'pomeriggio', -1.5, -1.45, 75, -32, 0],
+  ['k3-acquaio', 'mattina', -1.75, -0.95, 15, -22, 0],
+  ['k4-cucina-notte', 'notte', -0.7, 0.4, 50, -14, 0],
   ['c10-libri', 'pomeriggio', -1.6, 1.75, 90, -14, 0],
 ];
 const only = process.env.SHOTS?.split(',');

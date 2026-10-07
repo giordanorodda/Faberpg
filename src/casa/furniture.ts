@@ -503,7 +503,7 @@ export function hearth(height: number, stone: THREE.Material, plaster: THREE.Mat
   }
   const flames: THREE.Mesh[] = [];
   for (let i = 0; i < 9; i++) {
-    const f = flame(0.16 + rnd() * 0.2, i * 1.7, new THREE.Color(1.0, 0.4 + rnd() * 0.15, 0.1), 0.32);
+    const f = flame(0.16 + rnd() * 0.2, i * 1.7, new THREE.Color(1.0, 0.4 + rnd() * 0.15, 0.1), 0.2);
     f.scale.set(1.8 + rnd() * 0.6, 1, 1.4 + rnd() * 0.6);
     f.position.set(0.24 + rnd() * 0.16, op.y0 + 0.12 + rnd() * 0.06, (rnd() - 0.5) * 0.42);
     g.add(f);

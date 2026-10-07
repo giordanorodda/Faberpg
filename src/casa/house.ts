@@ -10,6 +10,7 @@ import type { WallOptions } from '../stile/paint';
 import { flushBookAtlas, makeBook } from './books';
 import * as De from './details';
 import * as Fu from './furniture';
+import { buildKitchen, KITCHEN_WINDOW } from './kitchen';
 
 /**
  * The player's house: two floors under a steep roof. Downstairs the hearth,
@@ -48,6 +49,8 @@ export interface Light {
 
 /** Something you can pick up and put down: furniture is carried low, small things in the hand. */
 export interface Movable {
+  /** Stable name for the save: the order things are built in never changes. */
+  id: string;
   obj: THREE.Object3D;
   kind: 'furniture' | 'small';
   /** The footprint that blocks walking (furniture only); kept up to date when it moves. */
@@ -113,7 +116,10 @@ export function buildHouse(): House {
   const movables: Movable[] = [];
   const movable = <T extends THREE.Object3D>(obj: T, kind: Movable['kind'], b?: Box): T => {
     obj.userData.noWonk = true;
-    const m: Movable = { obj, kind, box: b };
+    // named by what it is, so adding something new to the house never mixes up the saved ones
+    const base = (obj.userData.inspect as string | undefined) ?? kind;
+    const n = movables.filter((x) => x.id.startsWith(`${base}#`)).length;
+    const m: Movable = { id: `${base}#${n}`, obj, kind, box: b };
     obj.traverse((c) => (c.userData.movable = m));
     movables.push(m);
     return obj;
@@ -130,6 +136,7 @@ export function buildHouse(): House {
   const winS2 = { x0: -0.55, x1: 0.55, y0: UP + 0.7, y1: UP + 1.8 };
   const winE = { z0: 0.15, z1: 1.15, y0: 0.85, y1: 1.8 };
   const winN2 = { x0: -0.35, x1: 0.35, y0: UP + 1.25, y1: UP + 1.85 };
+  const winN1 = KITCHEN_WINDOW;
 
   // ------------------------------------------------------------ solid walls
   const solid = (x: number, y: number, z: number, sx: number, sy: number, sz: number) => {
@@ -141,7 +148,7 @@ export function buildHouse(): House {
   const sideH = UP + KNEE + 0.1;
   // north and south (gables): u runs with x
   for (const [z, ops] of [
-    [-D / 2 - WALL / 2, [winN2]],
+    [-D / 2 - WALL / 2, [winN1, winN2]],
     [D / 2 + WALL / 2, [doorS, winS, winS2]],
   ] as const) {
     const L = W + WALL * 2;
@@ -169,7 +176,7 @@ export function buildHouse(): House {
     group.add(s);
   };
   // from inside: north u = x + W/2, south u = W/2 - x, east u = z + D/2, west u = D/2 - z
-  skin({ w: W, h: H1, frieze: 2.2, patches: [{ x: 4.6, y: 1.9, r: 0.12 }] }, 11, 0, 0, -D / 2 + 0.012, 0);
+  skin({ w: W, h: H1, frieze: 2.2, patches: [{ x: 4.6, y: 1.9, r: 0.12 }], holes: [{ x0: winN1.x0 + W / 2, x1: winN1.x1 + W / 2, y0: winN1.y0, y1: winN1.y1 }] }, 11, 0, 0, -D / 2 + 0.012, 0);
   skin(
     {
       w: W,
@@ -352,6 +359,10 @@ export function buildHouse(): House {
     g.position.set(W / 2 + WALL / 2, (winE.y0 + winE.y1) / 2, (winE.z0 + winE.z1) / 2);
     g.rotation.y = Math.PI / 2;
   });
+  windowAt(winN1.x1 - winN1.x0, winN1.y1 - winN1.y0, (g) => {
+    g.position.set((winN1.x0 + winN1.x1) / 2, (winN1.y0 + winN1.y1) / 2, -D / 2 - WALL / 2);
+    g.rotation.y = Math.PI;
+  });
   windowAt(winN2.x1 - winN2.x0, winN2.y1 - winN2.y0, (g) => {
     g.position.set(0, (winN2.y0 + winN2.y1) / 2, -D / 2 - WALL / 2);
     g.rotation.y = Math.PI;
@@ -500,28 +511,13 @@ export function buildHouse(): House {
     group.add(tag(ky, 'chiavi'));
     living.push(ky);
     const cal = De.calendar();
-    cal.position.set(-W / 2 + 0.08, 1.75, -1.15);
+    cal.position.set(-W / 2 + 0.03, 1.95, -1.2);
     cal.rotation.y = Math.PI / 2;
     group.add(tag(cal, 'calendario'));
   }
-  // logs by the fire
-  {
-    const pile = new THREE.Group();
-    const bark = toon({ color: 0x6a4a32, rim: 0.15 });
-    const end = toon({ color: 0xc8a070, rim: 0.1 });
-    for (let i = 0; i < 9; i++) {
-      const lg = new THREE.Mesh(new THREE.CylinderGeometry(0.055 + rnd() * 0.02, 0.06, 0.42, 9), [bark, end, end]);
-      lg.rotation.set(Math.PI / 2, 0, (rnd() - 0.5) * 0.3);
-      const row = i < 4 ? 0 : i < 7 ? 1 : 2;
-      const k = i < 4 ? i : i < 7 ? i - 4 : i - 7;
-      lg.position.set(-0.17 + k * 0.12 + row * 0.06, 0.06 + row * 0.1, (rnd() - 0.5) * 0.06);
-      pile.add(lg);
-    }
-    pile.position.set(-W / 2 + 0.35, 0, -1.25);
-    pile.rotation.y = Math.PI / 2 + 0.1;
-    group.add(tag(organic(shadowed(pile), 0.02, 2), 'legna'));
-    box(-W / 2 + 0.35, -1.25, 0.5, 0.6);
-  }
+  // the kitchen corner, between the hearth and the north wall
+  buildKitchen({ group, box: (cx, cz, sx, sz) => box(cx, cz, sx, sz), movable, tag, living, stone });
+
   // the armchair, turned to the fire, its footstool, the little table with the candle
   const chairAt = new THREE.Vector3(-1.3, 0, 1.1);
   const chairYaw = -2.0;

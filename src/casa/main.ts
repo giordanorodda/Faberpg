@@ -11,6 +11,7 @@ import { LIBRI } from '../data/libri';
 import { buildCountryside, buildSky } from '../stile/sky';
 import { Carry } from './carry';
 import { tickFlames } from './furniture';
+import { HouseMemory } from './memory';
 import { Reader } from './reader';
 import { buildHouse, HOUSE, roofAbove, STAIR, UP } from './house';
 
@@ -183,7 +184,14 @@ controls.addEventListener('unlock', () => hud.intro.classList.remove('hidden'));
 
 const carry = new Carry(camera, house.group, house.colliders, (t) => say(t));
 document.addEventListener('mousedown', (e) => {
-  if (controls.isLocked && e.button === 0 && !seated) carry.use(floorY);
+  if (controls.isLocked && e.button === 0 && !seated) {
+    carry.use(floorY);
+    memory.touch();
+  }
+});
+// the mouse wheel turns what you hold, a little at a time
+document.addEventListener('wheel', (e) => {
+  if (carry.held) carry.rotate(Math.sign(e.deltaY) * 0.13);
 });
 
 const reader = new Reader();
@@ -242,9 +250,12 @@ window.addEventListener('keydown', (e) => {
     if (n >= 0 && n < PRESETS.length) applyPreset(n);
   }
   if (e.code === 'KeyE') interact();
-  if (e.code === 'KeyF' && !seated) carry.use(floorY);
-  if (e.code === 'KeyQ') carry.rotate(0.3);
-  if (e.code === 'KeyR') carry.rotate(-0.3);
+  if (e.code === 'KeyF' && !seated) {
+    carry.use(floorY);
+    memory.touch();
+  }
+  if (e.code === 'KeyQ') carry.rotate(0.26);
+  if (e.code === 'KeyR') carry.rotate(-0.26);
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 
@@ -295,7 +306,7 @@ function move(dt: number): void {
   const v = fwd.multiplyScalar(f).add(right.multiplyScalar(s)).normalize().multiplyScalar((carry.held?.kind === 'furniture' ? 0.7 : 1) * WALK * dt);
   const lvl: 0 | 1 = floorY > UP - 0.3 ? 1 : 0;
   // bumping into a chair shoves it along (more slowly than you walk)
-  if (floorAt(camera.position.x + v.x, camera.position.z + v.z, floorY) === null) carry.push(camera.position.x + v.x, camera.position.z + v.z, R, v.x * 0.8, v.z * 0.8, lvl);
+  if (floorAt(camera.position.x + v.x, camera.position.z + v.z, floorY) === null && carry.push(camera.position.x + v.x, camera.position.z + v.z, R, v.x * 0.8, v.z * 0.8, lvl)) memory.touch();
   let h = floorAt(camera.position.x + v.x, camera.position.z, floorY);
   if (h !== null) {
     camera.position.x += v.x;
@@ -328,6 +339,7 @@ function interact(): void {
   const fl = flames.find((f) => f.def.key === key);
   if (fl) {
     fl.lit = !fl.lit;
+    memory.touch();
     say(fl.lit ? 'Accendi la candela. La fiamma esita, poi si raddrizza.' : 'Spegni la candela con due dita. Un filo di fumo, odore di sego.');
   } else if (key === 'poltrona' && !seated) {
     seated = { back: camera.position.clone() };
@@ -357,6 +369,7 @@ function frame(): void {
   const t = timer.getElapsed();
   move(dt);
   carry.update(dt, floorY);
+  memory.update(dt);
   tickFlames(t);
   sky.update(t);
   const p = PRESETS[preset];
@@ -422,6 +435,12 @@ const params = new URLSearchParams(location.search);
 const byName = PRESETS.findIndex((q) => q.name.toLowerCase() === (params.get('ora') ?? '').toLowerCase());
 const hour = new Date().getHours();
 applyPreset(byName >= 0 ? byName : hour < 7 ? 0 : hour < 13 ? 1 : hour < 18 ? 2 : hour < 21 ? 3 : 4);
+// the house remembers where things were left, and which candles were burning
+const memory = new HouseMemory(house.movables, () => Object.fromEntries(flames.filter((f) => f.def.key).map((f) => [f.def.key!, f.lit])));
+if (!params.has('nuova')) {
+  const candles = memory.restore();
+  if (candles) for (const f of flames) if (f.def.key && f.def.key in candles) f.lit = candles[f.def.key];
+}
 requestAnimationFrame(frame);
 
 // for automated screenshots: place the camera without pointer lock
