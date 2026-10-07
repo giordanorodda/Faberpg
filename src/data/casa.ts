@@ -71,6 +71,8 @@ export const CASA_INSPECT: Record<string, string> = {
   laboratorio: 'Il laboratorio. Ogni attrezzo ha il suo posto, e il suo contorno dipinto sull\'asse: così si vede subito cosa manca.',
   studio: 'Lo studio. Uno scrittoio sotto la finestra, la carta, l\'inchiostro. Qualcosa da scrivere lo troverai.',
   supporto: 'Il puntello che hai tornito tu. Storto, ma regge.',
+  calce: 'Un secchio di calce col pennello dentro, lasciato da Ottavio. «Quando ti va di cambiare colore», ha detto.',
+  tappeto: 'Il tappeto davanti al fuoco.',
   sedia: 'Una sedia impagliata. La paglia del sedile è stata rifatta da qualcuno che aveva fretta.',
   panca: 'La panca sotto la finestra. Ci si siede chi aspetta che il tè sia pronto.',
   mela: 'Una mela del vecchio albero dietro la casa. Un po\' storta, molto dolce.',

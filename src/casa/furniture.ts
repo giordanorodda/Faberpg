@@ -269,7 +269,7 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
 }
 
 /** A patchwork quilt: squares of old clothes, each with its own little pattern, hand-stitched. */
-function quiltTex(): THREE.CanvasTexture {
+export function quiltTex(): THREE.CanvasTexture {
   return canvasTex(1024, 1024, (g) => {
     const rnd = makeRng(77);
     const pal = ['#a8604a', '#c8a468', '#4a6280', '#8a9668', '#e8dcc0', '#9a6a70', '#b8805a', '#6a8070', '#dcc8a0', '#e8dcc0'];
@@ -348,7 +348,7 @@ function quiltTex(): THREE.CanvasTexture {
 }
 
 /** A braided rag rug: rings of old fabric strips sewn in a spiral. Drawn for a CircleGeometry. */
-function ragRugTex(): THREE.CanvasTexture {
+export function ragRugTex(): THREE.CanvasTexture {
   return canvasTex(1024, 1024, (g) => {
     const rnd = makeRng(55);
     const pal = ['#9a5a46', '#b89a68', '#6a7088', '#7a8462', '#d0c0a0', '#84564e', '#a88a64', '#c8b490'];
@@ -888,7 +888,7 @@ function cushionTex(): THREE.CanvasTexture {
 }
 
 /** Knitted wool in wide stripes, cream and madder red, with a fringe-coloured border. */
-function blanketTex(): THREE.CanvasTexture {
+export function blanketTex(): THREE.CanvasTexture {
   return canvasTex(512, 512, (g) => {
     const stripes = ['#e8dcc0', '#a83a2e', '#e8dcc0', '#d8a850', '#e8dcc0', '#a83a2e'];
     stripes.forEach((c, i) => {

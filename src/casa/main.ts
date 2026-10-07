@@ -11,6 +11,7 @@ import { LIBRI } from '../data/libri';
 import { buildCountryside, buildSky } from '../stile/sky';
 import { ANNEX, ANNEX_DOOR, ANNEX_USES, type AnnexUse } from './annex';
 import { Carry } from './carry';
+import { applyDecor, CURTAINS, DEFAULT_DECOR, QUILTS, RUGS, WALLS, type DecorState } from './decor';
 import { tickFlames } from './furniture';
 import { Rain, rainyToday, Steam } from './living';
 import { HouseMemory } from './memory';
@@ -420,6 +421,7 @@ const progress = {
   keys: false,
   toolbox: false,
   shelf: false,
+  decor: { ...DEFAULT_DECOR } as DecorState,
 };
 let doorOpen = 0;
 function applyProgress(): void {
@@ -428,7 +430,22 @@ function applyProgress(): void {
     house.annex.furnish(progress.use);
   }
   house.shelfProp.visible = progress.shelf;
+  applyDecor(house.group, house.decor, progress.decor);
   if (progress.keys) house.group.traverse((o) => o.userData.inspect === 'chiavi' && (o.visible = false));
+}
+/** A small piece of work: choose, then time passes and the house changes. */
+function work(options: { id: string; title: string; note: string }[], current: string, set: (id: string) => void, after: string): void {
+  openChoice(
+    options.map((o) => ({ title: o.id === current ? `${o.title} (ora)` : o.title, note: o.note })),
+    (i) => {
+      if (options[i].id === current) return;
+      passTime(() => {
+        set(options[i].id);
+        applyProgress();
+        memory.touch();
+      }, after);
+    },
+  );
 }
 /** Time passes: the screen goes dark, the work is done, the light comes back. */
 function passTime(done: () => void, after: string): void {
@@ -588,6 +605,14 @@ function interact(forced?: string): void {
         memory.touch();
       }, `Ci vuole tutto il pomeriggio: la scopa, tre secchi d'acqua, gli stracci, i teli portati fuori a sbattere. Le cose vecchie le metti da parte: qualcuna servirà. Quando hai finito, la stanza è ${use === 'dispensa' ? 'una dispensa' : use === 'laboratorio' ? 'un laboratorio' : 'uno studio'}, ed è tua.`);
     });
+  } else if (key === 'calce') {
+    work(WALLS, progress.decor.wall, (id) => (progress.decor.wall = id), 'Una giornata intera col pennello e il secchio, i mobili scostati, il gatto offeso sul letto. La calce asciuga piano; la sera la stanza ha un altro colore, e sa di pulito.');
+  } else if (key === 'tende') {
+    work(CURTAINS, progress.decor.curtain, (id) => (progress.decor.curtain = id), 'Una sera col filo e l\'ago, vicino al fuoco. Gli orli non sono dritti, ma sono tuoi. Appendi le tende nuove all\'abbaino.');
+  } else if (key === 'tappeto') {
+    work(RUGS, progress.decor.rug, (id) => (progress.decor.rug = id), 'Arrotoli il tappeto vecchio, lo sbatti fuori, stendi quello che hai scelto davanti al fuoco.');
+  } else if (key === 'cassapanca' && progress.toolbox) {
+    work(QUILTS, progress.decor.quilt, (id) => (progress.decor.quilt = id), 'Sbatti la coperta dalla finestra, la stendi sul letto, la lisci con le mani. Il gatto la prova per primo.');
   } else if (key === 'cassapanca' && !progress.toolbox) {
     progress.toolbox = true;
     memory.touch();
@@ -726,7 +751,7 @@ if (!params.has('nuova')) {
     for (const f of flames) if (f.def.key && f.def.key in saved.candles) f.lit = saved.candles[f.def.key];
     // the fire has gone on burning while you were away, and may have gone out
     const ex = (saved.extra ?? {}) as Partial<typeof progress> & { fire?: number };
-    Object.assign(progress, { annex: ex.annex ?? 'locked', use: ex.use ?? null, keys: !!ex.keys, toolbox: !!ex.toolbox, shelf: !!ex.shelf });
+    Object.assign(progress, { annex: ex.annex ?? 'locked', use: ex.use ?? null, keys: !!ex.keys, toolbox: !!ex.toolbox, shelf: !!ex.shelf, decor: { ...DEFAULT_DECOR, ...(ex.decor ?? {}) } });
     applyProgress();
     annexLantern();
     const fire = Number(ex.fire ?? 1);

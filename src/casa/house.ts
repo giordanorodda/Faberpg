@@ -5,7 +5,7 @@ import * as F from '../bottega/fantasy';
 import * as P from '../bottega/props';
 import { MAT } from '../bottega/props';
 import { wonkify } from '../bottega/style';
-import { apple, bentBox, bowl, broom, cup, garlicBraid, glass, herbBunch, jug, M, nail, organic, plankFloor, rbox, shadowed, toon, toonify, wallSkin } from '../stile/kit';
+import { apple, bentBox, bowl, lathe, broom, cup, garlicBraid, glass, herbBunch, jug, M, nail, organic, plankFloor, rbox, shadowed, toon, toonify, wallSkin } from '../stile/kit';
 import type { WallOptions } from '../stile/paint';
 import { flushBookAtlas, makeBook } from './books';
 import { Cat, type CatSpot } from './cat';
@@ -95,6 +95,8 @@ export interface House {
   living: THREE.Object3D[];
   cat: Cat;
   annex: Annex;
+  /** What the player can change by hand: the curtains, the quilt, the rug by the fire (the walls are found by userData.wall). */
+  decor: { curtains: THREE.Mesh[]; quilt: THREE.Mesh; rug: THREE.Mesh; rolled: THREE.Object3D };
   /** The prop that will hold up the third shelf, once it is mended. */
   shelfProp: THREE.Object3D;
   catSpots: Record<string, CatSpot>;
@@ -148,6 +150,10 @@ export function buildHouse(): House {
   };
   const movables: Movable[] = [];
   let teacup: THREE.Object3D = new THREE.Group();
+  const decorCurtains: THREE.Mesh[] = [];
+  let decorQuilt = new THREE.Mesh();
+  let decorRug = new THREE.Mesh();
+  let decorRolled: THREE.Object3D = new THREE.Group();
   let teaSurface: THREE.Mesh = new THREE.Mesh();
   const movable = <T extends THREE.Object3D>(obj: T, kind: Movable['kind'], b?: Box): T => {
     obj.userData.noWonk = true;
@@ -614,7 +620,34 @@ export function buildHouse(): House {
     teaSurface = tea;
     const rug = Fu.ragRug(1.05, 0.8);
     rug.position.set(-1.85, 0.006, 0.6);
-    group.add(rug);
+    group.add(tag(rug, 'tappeto'));
+    decorRug = rug;
+    // the rug rolled up in the corner, when you would rather have the bare floor
+    const rolled = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.1, 18), toon({ color: 0x9a6a4a, rim: 0.3 }));
+    rolled.rotation.set(0.05, 0.2, Math.PI / 2 - 0.12);
+    rolled.position.set(-1.0, 0.09, 2.3);
+    rolled.visible = false;
+    group.add(tag(shadowed(rolled), 'tappeto'));
+    decorRolled = rolled;
+    // a bucket of lime by the door, left by Ottavio: the walls can be done again whenever you like
+    const lime = new THREE.Group();
+    lime.add(lathe([[0, 0], [0.12, 0.002], [0.14, 0.26], [0.145, 0.27], [0.135, 0.27], [0.115, 0.012], [0, 0.012]], M.staves, 28));
+    const limeTop = new THREE.Mesh(new THREE.CircleGeometry(0.13, 22), toon({ color: 0xf2eee4, rim: 0.2 }));
+    limeTop.rotation.x = -Math.PI / 2;
+    limeTop.position.y = 0.22;
+    lime.add(limeTop);
+    const brush = new THREE.Group();
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.35, 6), M.woodPale);
+    handle.position.y = 0.18;
+    brush.add(handle);
+    const bristle = rbox(0.1, 0.07, 0.04, toon({ color: 0xe8e0cc, rim: 0.2 }), 0.01);
+    brush.add(bristle);
+    brush.position.set(0.04, 0.24, 0);
+    brush.rotation.z = -0.35;
+    lime.add(brush);
+    lime.position.set(2.3, 0, D / 2 - 0.3);
+    group.add(tag(organic(shadowed(lime), 0.02, 3), 'calce'));
+    box(2.3, D / 2 - 0.3, 0.32, 0.32);
   }
   // the bookshelf on the west wall, past the armchair
   {
@@ -805,6 +838,7 @@ export function buildHouse(): House {
   const bedSpot = new THREE.Vector3();
   {
     const b = Fu.bed();
+    decorQuilt = b.quilt;
     b.group.position.set(-1.95, UP, 1.4);
     group.add(tag(b.group, 'letto'));
     box(-1.95, 1.4, 2.05, 1.4, 1);
@@ -869,6 +903,7 @@ export function buildHouse(): House {
         cu.position.set(s * 0.62, rodY - 0.02, D / 2 - 0.09);
         cu.rotation.y = Math.PI;
         group.add(tag(shadowed(cu), 'tende'));
+        decorCurtains.push(cu);
         for (let k = 0; k < 4; k++) {
           const ring = new THREE.Mesh(new THREE.TorusGeometry(0.02, 0.004, 4, 12), M.brass);
           ring.position.set(s * (0.45 + k * 0.11), rodY, D / 2 - 0.08);
@@ -942,6 +977,7 @@ export function buildHouse(): House {
     catSpots,
     annex,
     shelfProp,
+    decor: { curtains: decorCurtains, quilt: decorQuilt, rug: decorRug, rolled: decorRolled },
     seat: { at: seatAt, yaw: chairYaw + Math.PI },
     bedside: { at: new THREE.Vector3(-0.85, UP, 0.55), yaw: Math.PI * 0.6 },
   };

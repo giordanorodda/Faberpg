@@ -193,6 +193,7 @@ export function wallSkin(o: WallOptions, seed: number): THREE.Mesh {
   mat.alphaTest = 0.5;
   const m = new THREE.Mesh(geo, mat);
   m.receiveShadow = true;
+  m.userData.wall = true;
   return m;
 }
 
