@@ -58,7 +58,7 @@ const tag = <T extends THREE.Object3D>(o: T, key: string): T => {
 };
 
 /** A painted fieldstone texture for the plinth: stones of all sizes, soft light from above. */
-function stoneTex(): THREE.CanvasTexture {
+export function stoneTex(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 512;
   const g = c.getContext('2d')!;

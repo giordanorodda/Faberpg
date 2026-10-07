@@ -19,7 +19,7 @@ In pratica:
 - Il resto del codice: `core/` (tempo, meteo, salvataggio, input), `world/` (mappa, percorsi), `npc/` (routine e movimento), `dialogue/`, `activities/` (pesca, raccolta), `render/`, `ui/`, `game.ts` (il ciclo di gioco).
 - Le posizioni degli NPC **non si salvano**: si ricavano dall'orologio e dalle routine (`npc/schedule.ts`, §32). Quello che deve persistere va in `core/state.ts`.
 - Se cambi la forma di `GameState`, aumenta `STATE_VERSION` e aggiungi una migrazione in `core/save.ts`. Un mondo salvato non deve mai andare perso.
-- `bottega.html` + `src/bottega/` è una prova 3D separata (Three.js, prima persona) che non tocca il gioco 2D.
+- `bottega.html` + `src/bottega/` è una prova 3D separata (Three.js, prima persona) che non tocca il gioco 2D. `casa.html` + `src/casa/` è la casa del giocatore nello stesso stile (`src/stile/`): due piani, fuoco e candele con ombre, oggetti da spostare. Screenshot: `npx tsx scripts/casa-shot.ts`.
 - Il tempo è parametrizzato in `config.ts` (1:1 come da design; `V` lo accelera durante lo sviluppo).
 
 ## Prima di consegnare una modifica

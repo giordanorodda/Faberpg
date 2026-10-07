@@ -44,6 +44,40 @@ export const wallCollider = (axis: 'x' | 'z', min: number): Collider => ({
   },
 });
 
+/**
+ * An axis-aligned box (a mattress, a seat cushion, an armrest): points inside
+ * are pushed out through the nearest face, the top one preferred a little so
+ * cloth comes to rest on things rather than sliding off their sides.
+ */
+export const boxCollider = (min: THREE.Vector3, max: THREE.Vector3, pad = 0.01): Collider => ({
+  resolve(p) {
+    if (p.x < min.x - pad || p.x > max.x + pad || p.y < min.y - pad || p.y > max.y + pad || p.z < min.z - pad || p.z > max.z + pad) return;
+    const faces: [number, () => void][] = [
+      [(max.y + pad - p.y) * 0.7, () => (p.y = max.y + pad)],
+      [p.y - (min.y - pad), () => (p.y = min.y - pad)],
+      [max.x + pad - p.x, () => (p.x = max.x + pad)],
+      [p.x - (min.x - pad), () => (p.x = min.x - pad)],
+      [max.z + pad - p.z, () => (p.z = max.z + pad)],
+      [p.z - (min.z - pad), () => (p.z = min.z - pad)],
+    ];
+    faces.sort((a, b) => a[0] - b[0])[0][1]();
+  },
+});
+
+/** A horizontal cylinder along x (a rounded armrest, a bolster). */
+export const rollCollider = (y: number, z: number, x0: number, x1: number, r: number): Collider => ({
+  resolve(p) {
+    if (p.x < x0 || p.x > x1) return;
+    const dy = p.y - y;
+    const dz = p.z - z;
+    const d = Math.hypot(dy, dz);
+    if (d >= r) return;
+    const k = r / Math.max(d, 1e-6);
+    p.y = y + dy * k;
+    p.z = z + dz * k;
+  },
+});
+
 export interface SimOptions {
   steps?: number;
   iterations?: number;
@@ -57,6 +91,8 @@ export interface SimOptions {
   bend?: number;
   /** Friction against colliders: tangential speed kept on contact. */
   friction?: number;
+  /** Particles that do not move (in world space): a corner tucked under a pillow. */
+  pinned?: (p: THREE.Vector3) => boolean;
 }
 
 /**
@@ -90,6 +126,8 @@ export function settle(mesh: THREE.Mesh, o: SimOptions): void {
   }
   const n = P.length;
   const prev = P.map((p) => p.clone());
+  const fixed = P.map((p) => (o.pinned ? o.pinned(p) : false));
+  const rest = P.map((p) => p.clone());
 
   // triangles in particle indices
   const tris: [number, number, number][] = [];
@@ -187,6 +225,11 @@ export function settle(mesh: THREE.Mesh, o: SimOptions): void {
       }
       for (let i = 0; i < n; i++) {
         const p = P[i];
+        if (fixed[i]) {
+          p.copy(rest[i]);
+          prev[i].copy(rest[i]);
+          continue;
+        }
         tmp.copy(p);
         for (const c of o.colliders) c.resolve(p);
         if (!tmp.equals(p)) {
