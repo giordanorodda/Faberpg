@@ -234,6 +234,65 @@ export class HouseSound {
     } else this.burst(t, 0.15, 900, 'lowpass', 0.15);
   }
 
+  private whistleNodes: { o: OscillatorNode; g: GainNode } | null = null;
+  /** The kettle singing on the fire, until it is taken off. */
+  whistle(on: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (on && !this.whistleNodes) {
+      const o = ctx.createOscillator();
+      o.frequency.value = 1650;
+      const vib = ctx.createOscillator();
+      vib.frequency.value = 6;
+      const vd = ctx.createGain();
+      vd.gain.value = 25;
+      vib.connect(vd).connect(o.frequency);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.04, t + 2.5);
+      o.connect(g).connect(this.master);
+      o.start(t);
+      vib.start(t);
+      this.whistleNodes = { o, g };
+    } else if (!on && this.whistleNodes) {
+      const { o, g } = this.whistleNodes;
+      g.gain.setTargetAtTime(0.0001, t, 0.15);
+      o.stop(t + 1);
+      this.whistleNodes = null;
+    }
+  }
+
+  private rainGain: GainNode | null = null;
+  /** Rain on the roof and the windows: 0 dry … 1 a steady shower. */
+  rain(level: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (!this.rainGain) {
+      this.rainGain = ctx.createGain();
+      this.rainGain.gain.value = 0;
+      this.rainGain.connect(this.master);
+      const n = this.loop();
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1400;
+      bp.Q.value = 0.5;
+      const g = ctx.createGain();
+      g.gain.value = 0.18;
+      n.connect(bp).connect(g).connect(this.rainGain);
+      const n2 = this.loop();
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 200;
+      const g2 = ctx.createGain();
+      g2.gain.value = 0.25;
+      n2.connect(lp).connect(g2).connect(this.rainGain);
+    }
+    this.rainGain.gain.setTargetAtTime(level, ctx.currentTime, 1.2);
+    // now and then a drop falls from the eaves
+    if (level > 0.3 && Math.random() < 0.04) this.burst(ctx.currentTime, 0.03, 2200 + Math.random() * 1500, 'bandpass', 0.06 * level, 4);
+  }
+
   /** A page turned. */
   page(): void {
     if (!this.ctx) return;

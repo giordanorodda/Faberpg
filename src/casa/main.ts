@@ -11,6 +11,7 @@ import { LIBRI } from '../data/libri';
 import { buildCountryside, buildSky } from '../stile/sky';
 import { Carry } from './carry';
 import { tickFlames } from './furniture';
+import { Rain, rainyToday, Steam } from './living';
 import { HouseMemory } from './memory';
 import { Reader } from './reader';
 import { HouseSound, type Surface } from './sound';
@@ -45,6 +46,12 @@ scene.add(house.group);
 const sky = buildSky();
 scene.add(sky.mesh);
 scene.add(buildCountryside(new THREE.Vector2(0, 0), 9));
+const rain = new Rain();
+scene.add(rain.mesh);
+// steam from the kettle when it boils, and from the cup when the tea is hot
+const kettleSteam = new Steam(house.spout, 0.035);
+const cupSteam = new Steam(new THREE.Vector3(), 0.025, 14);
+scene.add(kettleSteam.group, cupSteam.group);
 
 // ------------------------------------------------------------------ light
 
@@ -107,14 +114,23 @@ const PRESETS: Preset[] = [
   { name: 'Notte', az: 165, el: 30, sun: 0.8, sunColor: 0x8aa4e0, sky: 0.22, skyColor: 0x3a4a8a, groundColor: 0x1a1a2a, top: 0x070c22, horizon: 0x1a2650, stars: 1, clouds: 0, glow: 0, night: true, exposure: 1.0 },
 ];
 let preset = 1;
+let raining = new URLSearchParams(location.search).get('meteo') === 'pioggia' || (new URLSearchParams(location.search).get('meteo') !== 'sereno' && rainyToday());
+let current: Preset;
 const dirOf = (az: number, el: number) => {
   const a = THREE.MathUtils.degToRad(az);
   const e = THREE.MathUtils.degToRad(el);
   return new THREE.Vector3(Math.sin(a) * Math.cos(e), Math.sin(e), -Math.cos(a) * Math.cos(e));
 };
+const grey = (hex: number, k: number, to = 0x8a9098) => new THREE.Color(hex).lerp(new THREE.Color(to), k).getHex();
 function applyPreset(i: number): void {
   preset = i;
-  const p = PRESETS[i];
+  const base = PRESETS[i];
+  // on a rainy day the sky is grey and low, the sun only a brightness behind it
+  const w = raining ? 0.75 : 0;
+  const p: Preset = raining
+    ? { ...base, sun: base.sun * 0.16, exposure: base.exposure * 0.94, sunColor: grey(base.sunColor, 0.6, 0xd8dce0), sky: base.sky * (base.night ? 1 : 1.1), skyColor: grey(base.skyColor, w), top: grey(base.top, w, base.night ? 0x10141c : 0x6a7280), horizon: grey(base.horizon, w, base.night ? 0x1a2028 : 0x9aa0a8), stars: 0, clouds: base.night ? 0 : 1, glow: base.glow * 0.2 }
+    : base;
+  current = p;
   const dir = dirOf(p.az, p.el);
   sky1.position.copy(dir).multiplyScalar(30).add(sky1.target.position);
   sky1.intensity = p.sun;
@@ -122,7 +138,7 @@ function applyPreset(i: number): void {
   hemi.intensity = p.sky;
   hemi.color.setHex(p.skyColor);
   hemi.groundColor.setHex(p.groundColor);
-  for (const b of bounces) b.intensity = p.night ? 0 : 1.0 * p.sky;
+  for (const b of bounces) b.intensity = p.night ? 0 : (raining ? 0.6 : 1.0) * p.sky;
   sky.set({
     top: p.top,
     horizon: p.horizon,
@@ -132,8 +148,9 @@ function applyPreset(i: number): void {
     sunGlow: p.glow,
     sunColor: p.sunColor,
     moonDir: p.night ? dir : dirOf(p.az + 160, 20),
-    moon: p.night ? 1 : i === 0 ? 0.3 : 0,
+    moon: raining ? 0 : p.night ? 1 : i === 0 ? 0.3 : 0,
   });
+  rain.on = raining;
   renderer.toneMappingExposure = p.exposure;
   // the candles are lit at dusk and at night, and put out in the day
   for (const f of flames) if (f.def.kind === 'candle') f.lit = p.night || i === 3;
@@ -207,18 +224,10 @@ const reader = new Reader();
 const shelfEl = document.getElementById('shelf')!;
 let choosing = false;
 function openShelf(): void {
-  choosing = true;
-  const ul = shelfEl.querySelector('ul')!;
-  ul.innerHTML = '';
-  LIBRI.forEach((b, i) => {
-    const li = document.createElement('li');
-    li.innerHTML = `<b>${i + 1}</b>${b.titolo}<span>${b.nota}</span>`;
-    ul.append(li);
-  });
-  const last = document.createElement('li');
-  last.innerHTML = '<span>E per lasciar stare</span>';
-  ul.append(last);
-  shelfEl.classList.add('open');
+  openChoice(
+    LIBRI.map((b) => ({ title: b.titolo, note: b.nota })),
+    (i) => startReading(i),
+  );
 }
 function closeShelf(): void {
   choosing = false;
@@ -255,7 +264,12 @@ window.addEventListener('keydown', (e) => {
   }
   if (choosing) {
     const n = Number(e.code.slice(5)) - 1;
-    if (e.code.startsWith('Digit') && n >= 0 && n < LIBRI.length) startReading(n);
+    const count = shelfEl.querySelectorAll('li b').length;
+    if (e.code.startsWith('Digit') && n >= 0 && n < count && choiceHandler) {
+      const h = choiceHandler;
+      closeShelf();
+      h(n);
+    }
     if (e.code === 'KeyE') closeShelf();
     return;
   }
@@ -263,6 +277,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code.startsWith('Digit')) {
     const n = Number(e.code.slice(5)) - 1;
     if (n >= 0 && n < PRESETS.length) applyPreset(n);
+  }
+  if (e.code === 'Digit6') {
+    raining = !raining;
+    applyPreset(preset);
   }
   if (e.code === 'KeyE') interact();
   if (e.code === 'KeyF' && !seated) useCarry();
@@ -370,11 +388,63 @@ function say(text: string): void {
   window.clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => hud.toast.classList.remove('show'), 7000);
 }
+// ------------------------------------------------------------------ the fire and the tea
+
+/** 1 = a full load of wood, 0 = cold ashes. */
+let fireLevel = 1;
+type Kettle = 'cold' | 'heating' | 'boil';
+const HERBS = [
+  { name: 'tiglio', su: 'sul tiglio', color: 0xc8a048, line: 'Tè di tiglio. Sa di estate, di api, di pomeriggi lunghi.' },
+  { name: 'menta', su: 'sulla menta', color: 0x9aa050, line: 'Menta, col miele. Ti scalda le mani, e la bocca resta fresca.' },
+  { name: 'la miscela di Bruna', su: 'sulla miscela di Bruna', color: 0x8a4a2a, line: 'La miscela di Bruna «per le sere lunghe». Sa di corteccia, di fumo, di qualcosa che non sai nominare.' },
+];
+const tea = { kettle: 'cold' as Kettle, heat: 0, steep: -1, herb: 0, cup: 'cold' as 'cold' | 'hot' | 'empty' };
+function updateTea(dt: number): void {
+  if (tea.kettle === 'heating') {
+    tea.heat += dt * (0.3 + 0.7 * Math.min(1, fireLevel * 1.5));
+    kettleSteam.amount = Math.min(0.5, tea.heat / 60);
+    if (tea.heat > 40) {
+      tea.kettle = 'boil';
+      sound.whistle(true);
+      say('Il bollitore comincia a fischiare.');
+    }
+  } else kettleSteam.amount = tea.kettle === 'boil' ? 1 : 0;
+  if (tea.steep >= 0) {
+    tea.steep += dt;
+    if (tea.steep > 12) {
+      tea.steep = -1;
+      tea.cup = 'hot';
+      const m = house.teaSurface.material as THREE.MeshToonMaterial;
+      m.color.setHex(HERBS[tea.herb].color);
+      house.teaSurface.visible = true;
+      say('Il tè è pronto: ne versi una tazza, sul tavolino accanto alla poltrona.');
+    }
+  }
+  cupSteam.amount = tea.cup === 'hot' ? 0.5 : 0;
+  house.teacup.getWorldPosition(cupSteam.at).y += 0.07;
+}
+let choiceHandler: ((i: number) => void) | null = null;
+function openChoice(items: { title: string; note: string }[], pick: (i: number) => void): void {
+  choosing = true;
+  choiceHandler = pick;
+  const ul = shelfEl.querySelector('ul')!;
+  ul.innerHTML = '';
+  items.forEach((b, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<b>${i + 1}</b>${b.title}<span>${b.note}</span>`;
+    ul.append(li);
+  });
+  const last = document.createElement('li');
+  last.innerHTML = '<span>E per lasciar stare</span>';
+  ul.append(last);
+  shelfEl.classList.add('open');
+}
+
 let lastKey = '';
 let sleeping = 0;
-function interact(): void {
+function interact(forced?: string): void {
   ray.setFromCamera(new THREE.Vector2(0, 0), camera);
-  const key = ray.intersectObjects(house.group.children, true)[0]?.object.userData.inspect as string | undefined;
+  const key = forced ?? (ray.intersectObjects(house.group.children, true)[0]?.object.userData.inspect as string | undefined);
   if (!key) return;
   const fl = flames.find((f) => f.def.key === key);
   if (fl) {
@@ -393,6 +463,47 @@ function interact(): void {
     openShelf();
   } else if (key === 'letto' && lastKey === 'letto' && !sleeping) {
     sleeping = 0.0001;
+  } else if (key === 'bollitore') {
+    if (fireLevel <= 0.04) say('Il fuoco è spento: prima bisogna accenderlo.');
+    else if (tea.kettle === 'cold') {
+      tea.kettle = 'heating';
+      tea.heat = 0;
+      say('Riempi il bollitore col ramaiolo e lo giri sopra il fuoco. Ora si aspetta.');
+    } else if (tea.kettle === 'heating') say('L\'acqua comincia appena a mormorare. Non ancora.');
+    else say('Bolle. Versa l\'acqua nella teiera (E sulla teiera).');
+  } else if (key === 'teiera') {
+    if (tea.kettle !== 'boil') say(CASA_INSPECT.teiera);
+    else
+      openChoice(
+        HERBS.map((h) => ({ title: h.name, note: '' })),
+        (i) => {
+          tea.herb = i;
+          tea.kettle = 'cold';
+          tea.steep = 0;
+          sound.whistle(false);
+          say(`Togli il bollitore dal fuoco e versi l'acqua ${HERBS[i].su}. Lasci le foglie in infusione.`);
+        },
+      );
+  } else if (key === 'tazza') {
+    if (tea.cup === 'hot') {
+      tea.cup = 'empty';
+      house.teaSurface.visible = false;
+      say(HERBS[tea.herb].line);
+    } else if (tea.cup === 'empty') say('La tazza è vuota. Sul fondo, due foglie.');
+    else say(CASA_INSPECT.tazza);
+  } else if (key === 'legna' || key === 'rametti') {
+    if (fireLevel <= 0.04) {
+      fireLevel = 0.45;
+      say('Rametti, due pigne, una scheggia di resina: il fuoco riprende, prima piano, poi con un sospiro.');
+    } else if (fireLevel > 0.85) say('Il fuoco è già carico. Un altro ceppo lo soffocherebbe.');
+    else {
+      fireLevel = Math.min(1, fireLevel + 0.4);
+      say('Metti un ceppo sul fuoco. Scoppietta, si assesta, prende.');
+    }
+    sound.thud(true);
+    memory.touch();
+  } else if (key === 'camino' && fireLevel <= 0.04) {
+    say('Il fuoco è spento, la cenere è fredda. Ci vogliono i rametti del cesto (E sul cesto).');
   } else if (key === 'gatto') {
     say(house.cat.spot.line);
   } else say(CASA_INSPECT[key] ?? '');
@@ -419,16 +530,27 @@ function frame(): void {
   const level = floorY > UP - 0.5 ? 1 : 0;
   for (const f of flames) {
     const fire = f.def.kind === 'fire';
-    for (const m of f.def.flames) m.visible = f.lit;
+    if (fire) f.lit = fireLevel > 0.04;
+    for (const m of f.def.flames) {
+      m.visible = f.lit;
+      if (fire) m.scale.y = 0.35 + 0.65 * Math.min(1, fireLevel * 1.4);
+    }
     // a flame never holds still: two or three rhythms that never line up
     const flick = 1 + Math.sin(t * 9.3 + f.def.at.x) * 0.06 + Math.sin(t * 23.1 + f.def.at.z) * 0.04 + (fire ? Math.sin(t * 3.7) * 0.08 : 0);
     const base = fire ? (p.night ? 3.0 : 1.4) : 1.3;
-    f.light.intensity = f.lit ? base * flick : 0;
+    f.light.intensity = f.lit ? base * flick * (fire ? 0.3 + 0.7 * Math.min(1, fireLevel * 1.3) : 1) : 0;
     // only the flames on your floor cast shadows (the others cannot reach you anyway)
     f.light.castShadow = f.lit && (fire || f.def.level === level);
     if (fire) f.light.position.set(f.def.at.x + Math.sin(t * 5.1) * 0.03, f.def.at.y + Math.sin(t * 7.3) * 0.02, f.def.at.z + Math.sin(t * 4.3) * 0.04);
   }
-  house.embers.emissiveIntensity = 1.0 + Math.sin(t * 2.3) * 0.25 + Math.sin(t * 5.7) * 0.1;
+  // the fire burns down slowly (a full load lasts about three hours) and the embers dim with it
+  fireLevel = Math.max(0, fireLevel - dt / (3 * 3600));
+  house.embers.emissiveIntensity = (0.15 + Math.min(1, fireLevel * 2)) * (1.0 + Math.sin(t * 2.3) * 0.25 + Math.sin(t * 5.7) * 0.1);
+  updateTea(dt);
+  kettleSteam.update(dt, t);
+  cupSteam.update(dt, t);
+  rain.update(dt);
+  sound.rain(raining ? (level === 1 ? 0.9 : 0.6) : 0);
   // the cat's day, from the clock; it moves only when you are not looking
   {
     if (seated) seatedFor += dt;
@@ -453,7 +575,7 @@ function frame(): void {
   house.living.forEach((o, i) => {
     o.rotation.z = (Math.sin(t * 0.7 + i * 1.7) * 0.6 + Math.sin(t * 1.9 + i) * 0.3) * 0.012;
   });
-  if (!p.night) sky1.intensity = p.sun * (0.85 + 0.15 * (0.5 + 0.5 * Math.sin(t * 0.11) * Math.sin(t * 0.047 + 2)));
+  if (!p.night) sky1.intensity = current.sun * (0.85 + 0.15 * (0.5 + 0.5 * Math.sin(t * 0.11) * Math.sin(t * 0.047 + 2)));
   grade.uniforms.night.value += ((p.night ? 1 : 0) - grade.uniforms.night.value) * Math.min(1, dt * 2);
   // going to sleep: the screen darkens, the night passes, morning comes in through the window
   if (sleeping > 0) {
@@ -501,11 +623,23 @@ applyPreset(byName >= 0 ? byName : hour < 7 ? 0 : hour < 13 ? 1 : hour < 18 ? 2 
 // the cat starts the day where the hour says
 house.cat.set(house.catSpots[['ciotola', 'panca', 'letto', 'poltrona', 'tappeto'][preset]]);
 // the house remembers where things were left, and which candles were burning
-const memory = new HouseMemory(house.movables, () => Object.fromEntries(flames.filter((f) => f.def.key).map((f) => [f.def.key!, f.lit])));
+const memory = new HouseMemory(
+  house.movables,
+  () => Object.fromEntries(flames.filter((f) => f.def.key).map((f) => [f.def.key!, f.lit])),
+  () => ({ fire: fireLevel }),
+);
 if (!params.has('nuova')) {
-  const candles = memory.restore();
-  if (candles) for (const f of flames) if (f.def.key && f.def.key in candles) f.lit = candles[f.def.key];
+  const saved = memory.restore();
+  if (saved) {
+    for (const f of flames) if (f.def.key && f.def.key in saved.candles) f.lit = saved.candles[f.def.key];
+    // the fire has gone on burning while you were away, and may have gone out
+    const fire = Number(saved.extra?.fire ?? 1);
+    const away = saved.savedAt ? (Date.now() - saved.savedAt) / 1000 : 0;
+    fireLevel = Math.max(0, fire - away / (3 * 3600));
+    if (fireLevel <= 0.04 && away > 600) window.setTimeout(() => say('Il fuoco si è spento mentre eri via. La casa sa di cenere fredda.'), 1500);
+  }
 }
+window.setInterval(() => memory.touch(), 60000);
 requestAnimationFrame(frame);
 
 // for automated screenshots: place the camera without pointer lock
@@ -515,6 +649,22 @@ requestAnimationFrame(frame);
     camera.position.set(x, y + EYE, z);
     camera.rotation.set(THREE.MathUtils.degToRad(pitchDeg), THREE.MathUtils.degToRad(yawDeg), 0, 'YXZ');
     hud.intro.style.display = 'none';
+  },
+  /** For tests: use a thing by its name, as if looking at it and pressing E. */
+  use(key: string) {
+    interact(key);
+    return hud.toast.textContent;
+  },
+  /** For tests: let time pass for the tea (headless rendering is too slow to wait). */
+  tick(sec: number) {
+    for (let k = 0; k < sec * 20; k++) updateTea(0.05);
+    return hud.toast.textContent;
+  },
+  choose(i: number) {
+    const h = choiceHandler;
+    closeShelf();
+    h?.(i);
+    return hud.toast.textContent;
   },
   read(i = 0) {
     startReading(i);

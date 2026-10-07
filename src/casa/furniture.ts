@@ -508,7 +508,7 @@ function plateTex(seed: number): THREE.CanvasTexture {
  * firebox blackened by years of smoke, logs that glow, and the kettle on
  * its hook. Faces +x; its back is at x = 0.
  */
-export function hearth(height: number, stone: THREE.Material, plaster: THREE.Material): { group: THREE.Group; light: THREE.Vector3; flames: THREE.Mesh[]; embers: THREE.MeshToonMaterial } {
+export function hearth(height: number, stone: THREE.Material, plaster: THREE.Material): { group: THREE.Group; light: THREE.Vector3; flames: THREE.Mesh[]; embers: THREE.MeshToonMaterial; kettle: THREE.Group } {
   const g = new THREE.Group();
   const rnd = makeRng(12);
   const W = 1.5;
@@ -625,7 +625,7 @@ export function hearth(height: number, stone: THREE.Material, plaster: THREE.Mat
   shadowed(g);
   for (const f of flames) f.castShadow = false;
   smoke.castShadow = false;
-  return { group: g, light: new THREE.Vector3(0.55, op.y0 + 0.35, 0), flames, embers };
+  return { group: g, light: new THREE.Vector3(0.55, op.y0 + 0.35, 0), flames, embers, kettle: k };
 }
 
 // ------------------------------------------------------------------ seats

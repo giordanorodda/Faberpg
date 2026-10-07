@@ -45,13 +45,15 @@ const shots: [string, string, number | 'sit' | 'read', number, number, number, n
   ['g1-gatto-panca', 'mattina', 1.75, 1.45, -55, -30, 0],
   ['g2-gatto-ciotola', 'alba', -1.05, -0.75, 55, -35, 0],
   ['g3-gatto-fuoco', 'notte', -0.95, 0.75, 75, -30, 0],
+  ['w1-pioggia', 'pomeriggio', 0.6, 0.9, -95, -6, 0],
+  ['w2-pioggia-sera', 'tramonto', -0.5, 2.0, 70, -10, 0],
   ['c10-libri', 'pomeriggio', -1.6, 1.75, 90, -14, 0],
 ];
 const only = process.env.SHOTS?.split(',');
 for (const [name, ora, x, z, yaw, pitch, y] of shots) {
   if (only && !only.includes(name)) continue;
   const t0 = Date.now();
-  await page.goto(`${base}casa.html?ora=${ora}`, { waitUntil: 'domcontentloaded', timeout: 240000 });
+  await page.goto(`${base}casa.html?ora=${ora}&nuova&meteo=${name.includes('pioggia') ? 'pioggia' : 'sereno'}`, { waitUntil: 'domcontentloaded', timeout: 240000 });
   await page.waitForFunction(() => 'bottega' in window, null, { timeout: 240000 });
   console.log('loaded in', Date.now() - t0, 'ms');
   await page.waitForTimeout(Number(process.env.SHOT_WAIT ?? 3000));

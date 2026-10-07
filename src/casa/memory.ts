@@ -14,6 +14,9 @@ interface Saved {
   v: number;
   objects: Record<string, { p: [number, number, number]; ry: number }>;
   candles: Record<string, boolean>;
+  /** Other small things the house remembers (the fire, the tea), with when they were saved. */
+  extra?: Record<string, unknown>;
+  savedAt?: number;
 }
 
 function read(): Saved | null {
@@ -34,12 +37,13 @@ export class HouseMemory {
   constructor(
     private movables: Movable[],
     private candles: () => Record<string, boolean>,
+    private extra: () => Record<string, unknown> = () => ({}),
   ) {
     window.addEventListener('beforeunload', () => this.save());
   }
 
   /** Puts things back where they were left. Returns the candles' state, if remembered. */
-  restore(): Record<string, boolean> | null {
+  restore(): Saved | null {
     const s = read();
     if (!s) return null;
     const bb = new THREE.Box3();
@@ -55,7 +59,7 @@ export class HouseMemory {
         Object.assign(m.box, { minX: bb.min.x + k, maxX: bb.max.x - k, minZ: bb.min.z + k, maxZ: bb.max.z - k, level: bb.min.y > 2 ? 1 : 0 } satisfies Partial<Box>);
       }
     }
-    return s.candles;
+    return s;
   }
 
   touch(): void {
@@ -77,7 +81,7 @@ export class HouseMemory {
       objects[m.id] = { p: [p.x, p.y, p.z].map((v) => Math.round(v * 1000) / 1000) as [number, number, number], ry: Math.round(m.obj.rotation.y * 1000) / 1000 };
     }
     try {
-      localStorage.setItem(KEY, JSON.stringify({ v: VERSION, objects, candles: this.candles() } satisfies Saved));
+      localStorage.setItem(KEY, JSON.stringify({ v: VERSION, objects, candles: this.candles(), extra: this.extra(), savedAt: Date.now() } satisfies Saved));
     } catch {
       /* without storage the house simply starts fresh next time */
     }

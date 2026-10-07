@@ -87,6 +87,10 @@ export interface House {
   colliders: Box[];
   lights: Light[];
   embers: THREE.MeshToonMaterial;
+  /** Where steam comes out of the kettle's spout, and the teacup by the armchair. */
+  spout: THREE.Vector3;
+  teacup: THREE.Object3D;
+  teaSurface: THREE.Mesh;
   living: THREE.Object3D[];
   cat: Cat;
   catSpots: Record<string, CatSpot>;
@@ -139,6 +143,8 @@ export function buildHouse(): House {
     return b;
   };
   const movables: Movable[] = [];
+  let teacup: THREE.Object3D = new THREE.Group();
+  let teaSurface: THREE.Mesh = new THREE.Mesh();
   const movable = <T extends THREE.Object3D>(obj: T, kind: Movable['kind'], b?: Box): T => {
     obj.userData.noWonk = true;
     // named by what it is, so adding something new to the house never mixes up the saved ones
@@ -476,6 +482,7 @@ export function buildHouse(): House {
   const hearth = Fu.hearth(H1, stone, M.plaster);
   hearth.group.position.set(-W / 2, 0, 0);
   group.add(tag(hearth.group, 'camino'));
+  tag(hearth.kettle, 'bollitore');
   box(-W / 2 + 0.45, 0, 1.0, 1.6);
   lights.push({ at: hearth.light.clone().add(new THREE.Vector3(-W / 2, 0, 0)), level: 0, flames: hearth.flames, kind: 'fire' });
   // the chimney goes on up through the bedroom
@@ -599,6 +606,8 @@ export function buildHouse(): House {
     tea.position.y = 0.058;
     tc.add(tea);
     group.add(movable(tag(tc, 'tazza'), 'small'));
+    teacup = tc;
+    teaSurface = tea;
     const rug = Fu.ragRug(1.05, 0.8);
     rug.position.set(-1.85, 0.006, 0.6);
     group.add(rug);
@@ -899,6 +908,8 @@ export function buildHouse(): House {
   };
   const cat = new Cat(catSpots.letto);
   group.add(tag(cat.group, 'gatto'));
+  group.updateMatrixWorld(true);
+  const spout = hearth.kettle.localToWorld(new THREE.Vector3(0.175, 0.15, 0));
   flushBookAtlas();
   // Everything a little crooked, as if built by hand.
   wonkify(group, 0.5);
@@ -910,6 +921,9 @@ export function buildHouse(): House {
     colliders,
     lights,
     embers: hearth.embers,
+    spout,
+    teacup,
+    teaSurface,
     living,
     cat,
     catSpots,
