@@ -31,5 +31,10 @@ export const BOTTEGA_INSPECT: Record<string, string> = {
   scudo: 'Uno scudo rotondo con un airone dipinto, sbiadito, e una spada corta. Erano di Gino. Non sono in vendita, e Teresa non ne parla.',
   corda: 'Una matassa di corda di canapa. Chi va nel bosco profondo ne compra sempre un pezzo in più di quanto serva.',
   lanterna: 'Una lanterna da viaggio, di ferro e vetro. Ha una piccola ammaccatura su un lato, come se fosse già stata da qualche parte.',
+  mele: 'Mele piccole e storte, dal melo dietro casa Rinaldi. Le più belle le tiene Nella; queste profumano di più.',
+  cipolle: 'Cipolle dorate, ancora con un po\' di terra. Nel cesto c\'è anche un aglio che non dovrebbe esserci.',
+  trecce: 'Trecce d\'aglio e di cipolle appese al chiodo. Teresa le intreccia d\'inverno, la sera, quando non c\'è nessuno.',
+  formaggi: 'Forme di formaggio di pecora, una già tagliata. Il coltello non c\'è: Teresa lo tiene in tasca.',
+  pacchetti: 'Pacchetti di carta legati con lo spago: sale, zucchero, semi. Su ognuno, a matita, un nome e un prezzo.',
   calamaio: 'Un calamaio e una penna d\'oca. L\'inchiostro è quasi secco: Teresa scrive molto.',
 };

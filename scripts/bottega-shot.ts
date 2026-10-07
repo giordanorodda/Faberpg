@@ -24,7 +24,10 @@ const shots: [string, string, number, number, number, number][] = [
   ['b9-parete-ovest', 'mattina', 0.6, 0.6, 90, 2],
 ];
 for (const [name, ora, x, z, yaw, pitch] of shots) {
-  await page.goto(`${base}bottega.html?ora=${ora}`);
+  const t0 = Date.now();
+  await page.goto(`${base}bottega.html?ora=${ora}`, { waitUntil: 'domcontentloaded', timeout: 180000 });
+  await page.waitForFunction(() => 'bottega' in window, null, { timeout: 180000 });
+  console.log('loaded in', Date.now() - t0, 'ms');
   await page.waitForTimeout(2500);
   await page.evaluate(([x, z, yaw, pitch]) => (window as unknown as { bottega: { view(...a: number[]): void } }).bottega.view(x, z, yaw, pitch), [x, z, yaw, pitch]);
   await page.waitForTimeout(2500);

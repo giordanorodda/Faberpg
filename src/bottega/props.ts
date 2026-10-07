@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeRng } from '../core/rng';
-import { burlap, material, wood, writing } from './textures';
+import { material, texSet, writing } from './textures';
 
 /**
  * Builders for the objects in the shop. Everything is made of simple
@@ -9,12 +11,12 @@ import { burlap, material, wood, writing } from './textures';
  */
 
 export const MAT = {
-  darkWood: material(wood(31, [92, 62, 38]), { bump: 1 }),
-  midWood: material(wood(32, [128, 88, 52]), { bump: 1 }),
-  paleWood: material(wood(33, [170, 130, 86]), { bump: 1 }),
+  darkWood: material(texSet('woodDark'), { bump: 1 }),
+  midWood: material(texSet('woodMid'), { bump: 1 }),
+  paleWood: material(texSet('woodPale'), { bump: 1 }),
   brass: new THREE.MeshStandardMaterial({ color: 0xc8a050, metalness: 1, roughness: 0.32 }),
   iron: new THREE.MeshStandardMaterial({ color: 0x2c2a28, metalness: 0.85, roughness: 0.6 }),
-  burlap: material(burlap(41), { bump: 2 }),
+  burlap: material(texSet('burlap', [2, 2]), { bump: 2 }),
   flour: new THREE.MeshStandardMaterial({ color: 0xf2ece0, roughness: 1 }),
   paper: new THREE.MeshStandardMaterial({ color: 0xe9dfc6, roughness: 0.95 }),
   wax: new THREE.MeshStandardMaterial({ color: 0xefe6cf, roughness: 0.6 }),
@@ -47,24 +49,23 @@ export function shadowed<T extends THREE.Object3D>(obj: T): T {
   return obj;
 }
 
-/** A box whose UVs follow its real size, so textures keep the same scale everywhere. */
-export function box(w: number, h: number, d: number, mat: THREE.Material, texelsPerMeter = 1): THREE.Mesh {
-  const g = new THREE.BoxGeometry(w, h, d);
+/**
+ * A box whose UVs follow its real size, so textures keep the same scale
+ * everywhere. Edges are slightly rounded: real wood and stone never have
+ * perfectly sharp corners, and the thin highlight on a bevel is much of
+ * what makes an object read as solid rather than as plastic.
+ */
+export function box(w: number, h: number, d: number, mat: THREE.Material, texelsPerMeter = 1, rounded = true): THREE.Mesh {
+  const minDim = Math.min(w, h, d);
+  const g = rounded && minDim > 0.015 ? new RoundedBoxGeometry(w, h, d, 2, Math.min(0.012, minDim * 0.25)) : new THREE.BoxGeometry(w, h, d);
   const uv = g.attributes.uv as THREE.BufferAttribute;
-  // faces: +x, -x, +y, -y, +z, -z (4 vertices each)
-  const dims: [number, number][] = [
-    [d, h],
-    [d, h],
-    [w, d],
-    [w, d],
-    [w, h],
-    [w, h],
-  ];
-  for (let f = 0; f < 6; f++) {
-    for (let i = 0; i < 4; i++) {
-      const k = f * 4 + i;
-      uv.setXY(k, uv.getX(k) * dims[f][0] * texelsPerMeter, uv.getY(k) * dims[f][1] * texelsPerMeter);
-    }
+  const n = g.attributes.normal as THREE.BufferAttribute;
+  for (let k = 0; k < uv.count; k++) {
+    const ax = Math.abs(n.getX(k));
+    const ay = Math.abs(n.getY(k));
+    const az = Math.abs(n.getZ(k));
+    const [du, dv] = ax >= ay && ax >= az ? [d, h] : ay >= az ? [w, d] : [w, h];
+    uv.setXY(k, uv.getX(k) * du * texelsPerMeter, uv.getY(k) * dv * texelsPerMeter);
   }
   return new THREE.Mesh(g, mat);
 }
@@ -303,10 +304,7 @@ export function sack(seed: number, open = false): THREE.Group {
 export function barrel(): THREE.Group {
   const g = new THREE.Group();
   const h = 0.85;
-  const staves = wood(51, [120, 82, 48]);
-  staves.map.repeat.set(8, 1);
-  staves.bumpMap.repeat.set(8, 1);
-  staves.roughnessMap.repeat.set(8, 1);
+  const staves = texSet('staves', [8, 1]);
   const prof: [number, number][] = [];
   for (let i = 0; i <= 10; i++) {
     const t = i / 10;
@@ -455,16 +453,46 @@ export function sign(text: string): THREE.Group {
   return shadowed(g);
 }
 
+/** A bunch of herbs hung upside down to dry: many thin stems, tied at the top, with leaves. */
 export function herbs(seed: number): THREE.Group {
   const rnd = makeRng(seed);
   const g = new THREE.Group();
-  const greens = [0x5a6a3a, 0x6a7040, 0x7a6a40, 0x4a5a34];
-  const string = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.3, 4), MAT.string);
-  string.position.y = -0.15;
+  const greens = [0x5a6a3a, 0x6a7040, 0x7a6a40, 0x4a5a34, 0x6a6a4a];
+  const leafMat = new THREE.MeshStandardMaterial({ color: greens[Math.floor(rnd() * greens.length)], roughness: 1, side: THREE.DoubleSide });
+  const stemMat = new THREE.MeshStandardMaterial({ color: 0x7a7048, roughness: 1 });
+  const string = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.26, 4), MAT.string);
+  string.position.y = -0.13;
   g.add(string);
-  const bunch = new THREE.Mesh(new THREE.ConeGeometry(0.06 + rnd() * 0.03, 0.28, 7), new THREE.MeshStandardMaterial({ color: greens[Math.floor(rnd() * greens.length)], roughness: 1, flatShading: true }));
-  bunch.position.y = -0.42;
-  g.add(bunch);
+  const tie = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.004, 4, 10), MAT.string);
+  tie.rotation.x = Math.PI / 2;
+  tie.position.y = -0.27;
+  g.add(tie);
+  // Stems and leaves are merged into two meshes per bunch: hundreds of tiny
+  // separate objects would cost far more to draw than they are worth.
+  const stems: THREE.BufferGeometry[] = [];
+  const leaves: THREE.BufferGeometry[] = [];
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  for (let i = 0; i < 22; i++) {
+    // stems fan out downwards from the knot
+    const a = rnd() * Math.PI * 2;
+    const spread = 0.15 + rnd() * 0.35;
+    const len = 0.22 + rnd() * 0.12;
+    const stemRot = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(Math.cos(a) * spread, 0, Math.sin(a) * spread));
+    const base = new THREE.Matrix4().makeTranslation(0, -0.27, 0).multiply(stemRot);
+    const st = new THREE.CylinderGeometry(0.0015, 0.002, len, 3);
+    st.applyMatrix4(new THREE.Matrix4().makeTranslation(0, -len / 2, 0)).applyMatrix4(base);
+    stems.push(st);
+    for (let k = 0; k < 4; k++) {
+      const l = new THREE.PlaneGeometry(0.018, 0.04);
+      q.setFromEuler(new THREE.Euler(rnd() * 0.8, rnd() * Math.PI, (rnd() - 0.5) * 1.2));
+      m.compose(new THREE.Vector3((rnd() - 0.5) * 0.02, -len * (0.3 + k * 0.18), (rnd() - 0.5) * 0.02), q, new THREE.Vector3(1, 1, 1));
+      l.applyMatrix4(m).applyMatrix4(base);
+      leaves.push(l);
+    }
+  }
+  g.add(new THREE.Mesh(mergeGeometries(stems), stemMat));
+  g.add(new THREE.Mesh(mergeGeometries(leaves), leafMat));
   return shadowed(g);
 }
 
@@ -531,4 +559,157 @@ export function candlestick(): { group: THREE.Group; flame: THREE.Mesh } {
   flame.position.y = 0.165;
   g.add(flame);
   return { group: shadowed(g), flame };
+}
+
+// ------------------------------------------------------------------ everyday clutter
+
+/** A wicker basket, filled with apples or onions. */
+export function basket(seed: number, fruit: 'mele' | 'cipolle'): THREE.Group {
+  const rnd = makeRng(seed);
+  const g = new THREE.Group();
+  const wickerTex = document.createElement('canvas');
+  wickerTex.width = wickerTex.height = 64;
+  const w = wickerTex.getContext('2d')!;
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      w.fillStyle = (x + y) % 2 ? '#9a7a48' : '#b8945a';
+      w.fillRect(x * 8, y * 8, 8, 8);
+    }
+  }
+  const t = new THREE.CanvasTexture(wickerTex);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(6, 2);
+  t.colorSpace = THREE.SRGBColorSpace;
+  const wicker = new THREE.MeshStandardMaterial({ map: t, roughness: 1, side: THREE.DoubleSide });
+  const body = lathe([[0, 0], [0.13, 0.005], [0.17, 0.06], [0.19, 0.14], [0.195, 0.145]], wicker, 20);
+  g.add(body);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.193, 0.012, 6, 28), wicker);
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.145;
+  g.add(rim);
+  const colors = fruit === 'mele' ? [0xa8302a, 0xc04a2a, 0x9a3a24, 0xb8a03a] : [0xc8a070, 0xb88a5a, 0xd8b88a];
+  for (let i = 0; i < 14; i++) {
+    const a = rnd() * Math.PI * 2;
+    const r = rnd() * 0.12;
+    const s = fruit === 'mele' ? 0.036 + rnd() * 0.008 : 0.032 + rnd() * 0.01;
+    const m = new THREE.Mesh(new THREE.SphereGeometry(s, 12, 10), new THREE.MeshStandardMaterial({ color: colors[Math.floor(rnd() * colors.length)], roughness: fruit === 'mele' ? 0.45 : 0.8 }));
+    m.scale.y = fruit === 'mele' ? 0.9 : 1.1;
+    m.position.set(Math.cos(a) * r, 0.11 + rnd() * 0.04 + (i > 8 ? 0.03 : 0), Math.sin(a) * r);
+    g.add(m);
+  }
+  return shadowed(g);
+}
+
+/** A braid of garlic or onions hanging from a nail. */
+export function braid(seed: number, garlic = true): THREE.Group {
+  const rnd = makeRng(seed);
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: garlic ? 0xe8e0cc : 0xb8844a, roughness: 0.85 });
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.01, 0.6, 6), new THREE.MeshStandardMaterial({ color: 0xb8a070, roughness: 1 }));
+  stem.position.y = -0.3;
+  g.add(stem);
+  for (let i = 0; i < 12; i++) {
+    const s = garlic ? 0.028 : 0.035;
+    const b = new THREE.Mesh(new THREE.SphereGeometry(s, 10, 8), mat);
+    b.scale.y = 0.85;
+    b.position.set((i % 2 ? 1 : -1) * (0.025 + rnd() * 0.01), -0.08 - i * 0.042, (rnd() - 0.5) * 0.03);
+    g.add(b);
+  }
+  return shadowed(g);
+}
+
+/** Wheels of cheese; one has a wedge cut out. */
+export function cheeses(): THREE.Group {
+  const g = new THREE.Group();
+  const rind = new THREE.MeshStandardMaterial({ color: 0xc89a4a, roughness: 0.7 });
+  const paste = new THREE.MeshStandardMaterial({ color: 0xf0dca0, roughness: 0.9 });
+  const w1 = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.09, 28), rind);
+  w1.position.y = 0.045;
+  g.add(w1);
+  const w2 = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 28), rind);
+  w2.position.set(0.02, 0.13, 0.01);
+  g.add(w2);
+  // a cut wheel: most of a cylinder plus the two pale cut faces
+  const cut = new THREE.Group();
+  const part = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.08, 24, 1, false, 0.6, Math.PI * 2 - 0.6), [rind, paste, paste]);
+  cut.add(part);
+  for (const a of [0.6, 0]) {
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.08), paste);
+    face.position.set(Math.sin(a) * 0.06, 0, Math.cos(a) * 0.06);
+    face.rotation.y = a - Math.PI / 2;
+    cut.add(face);
+  }
+  cut.position.set(0.34, 0.04, 0);
+  g.add(cut);
+  return shadowed(g);
+}
+
+/** Paper packets tied with string (salt, sugar, seeds). */
+export function packets(seed: number, n = 4): THREE.Group {
+  const rnd = makeRng(seed);
+  const g = new THREE.Group();
+  const papers = [0xe4d8b8, 0xd8c8a0, 0xc8b890, 0xeee4cc];
+  for (let i = 0; i < n; i++) {
+    const w = 0.08 + rnd() * 0.04;
+    const h = 0.11 + rnd() * 0.05;
+    const p = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.06), new THREE.MeshStandardMaterial({ color: papers[Math.floor(rnd() * papers.length)], roughness: 0.95 }));
+    p.position.set(i * 0.11, h / 2, (rnd() - 0.5) * 0.03);
+    p.rotation.y = (rnd() - 0.5) * 0.25;
+    g.add(p);
+    const s = new THREE.Mesh(new THREE.TorusGeometry(Math.max(w, 0.06) * 0.6, 0.002, 4, 16), MAT.string);
+    s.position.copy(p.position);
+    s.rotation.copy(p.rotation);
+    s.scale.set(1, 1.6, 1);
+    g.add(s);
+  }
+  return shadowed(g);
+}
+
+/** A wooden ladder, leaning against the shelves. */
+export function ladder(height: number): THREE.Group {
+  const g = new THREE.Group();
+  for (const x of [-0.2, 0.2]) {
+    const rail = box(0.05, height, 0.04, MAT.paleWood, 2);
+    rail.position.set(x, height / 2, 0);
+    g.add(rail);
+  }
+  for (let y = 0.3; y < height - 0.1; y += 0.32) {
+    const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.42, 8), MAT.paleWood);
+    rung.rotation.z = Math.PI / 2;
+    rung.position.y = y;
+    g.add(rung);
+  }
+  return shadowed(g);
+}
+
+/** A worn rag rug in front of the counter. */
+export function rug(w: number, d: number): THREE.Mesh {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const x = c.getContext('2d')!;
+  const rnd = makeRng(21);
+  const cols = ['#6a4232', '#4a4e58', '#8a7a5a', '#5a5640', '#7a5a42', '#5e4440', '#8a8270'];
+  for (let y = 0; y < 256; y += 6) {
+    x.fillStyle = cols[Math.floor(rnd() * cols.length)];
+    x.fillRect(0, y, 512, 6);
+  }
+  // wear: the middle has faded under twenty years of feet
+  const grd = x.createRadialGradient(256, 128, 20, 256, 128, 260);
+  grd.addColorStop(0, 'rgba(200,180,150,0.35)');
+  grd.addColorStop(1, 'rgba(200,180,150,0)');
+  x.fillStyle = grd;
+  x.fillRect(0, 0, 512, 256);
+  for (let i = 0; i < 4000; i++) {
+    x.fillStyle = `rgba(0,0,0,${rnd() * 0.12})`;
+    x.fillRect(rnd() * 512, rnd() * 256, 2, 1);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ map: t, roughness: 1 }));
+  m.rotation.x = -Math.PI / 2;
+  m.position.y = 0.006;
+  m.receiveShadow = true;
+  return m;
 }

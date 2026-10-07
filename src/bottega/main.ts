@@ -6,6 +6,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BOTTEGA_INSPECT } from '../data/bottega';
 import { buildOutside, buildRoom, ROOM, type Collider } from './room';
@@ -14,7 +16,7 @@ import { buildOutside, buildRoom, ROOM, type Collider } from './room';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -103,8 +105,9 @@ const shaftMat = new THREE.ShaderMaterial({
   vertexShader: `attribute float along; varying float vAlong; varying vec3 vN; varying vec3 vV;
     void main(){ vAlong = along; vec4 mv = modelViewMatrix * vec4(position,1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
   fragmentShader: `uniform vec3 color; uniform float strength; varying float vAlong; varying vec3 vN; varying vec3 vV;
-    void main(){ float facing = pow(abs(dot(normalize(vN), normalize(vV))), 2.5);
-      float a = strength * facing * pow(1.0 - vAlong, 1.4) * smoothstep(0.0, 0.08, vAlong); gl_FragColor = vec4(color * a, 1.0); }`,
+    void main(){ float t = clamp(vAlong, 0.0, 1.0);
+      float facing = pow(clamp(abs(dot(normalize(vN), normalize(vV))), 0.0, 1.0), 2.5);
+      float a = strength * facing * pow(max(1.0 - t, 0.0), 1.4) * smoothstep(0.0, 0.08, t); gl_FragColor = vec4(color * a, 1.0); }`,
 });
 const shafts = new THREE.Group();
 scene.add(shafts);
@@ -223,6 +226,7 @@ function applyPreset(i: number): void {
   for (const m of room.glows) m.emissiveIntensity = night ? 1.1 : i === 3 || i === 0 ? 0.55 : 0.2;
   firefliesOn = night ? 1 : i === 3 ? 0.6 : 0.15;
   renderer.toneMappingExposure = p.exposure;
+  scene.environmentIntensity = night ? 0.03 : i === 3 || i === 0 ? 0.18 : 0.35;
   shaftMat.uniforms.strength.value = night ? 0.0 : i === 1 || i === 2 ? 0.045 : 0.07;
   shaftMat.uniforms.color.value.setHex(p.sunColor);
   dustMat.opacity = night ? 0.08 : 0.45;
@@ -235,6 +239,22 @@ function applyPreset(i: number): void {
 
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, { samples: 4, type: THREE.HalfFloatType }));
 composer.addPass(new RenderPass(scene, camera));
+
+/**
+ * Replaces any invalid pixel (NaN or infinity) with black and caps extreme
+ * values. Some GPUs produce the odd invalid pixel; without this, the bloom
+ * blur spreads it into large black blotches.
+ */
+const sanitize = () =>
+  new ShaderPass({
+    uniforms: { tDiffuse: { value: null } },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+      void main(){ vec4 c = texture2D(tDiffuse, vUv);
+        if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0);
+        gl_FragColor = vec4(clamp(c.rgb, 0.0, 32.0), 1.0); }`,
+  });
+composer.addPass(sanitize());
 const gtao = new GTAOPass(scene, camera, window.innerWidth, window.innerHeight);
 gtao.updateGtaoMaterial({ radius: 0.35, distanceFallOff: 1, thickness: 1, scale: 1, samples: 16 });
 gtao.blendIntensity = 0.85;
@@ -246,9 +266,32 @@ gtao.render = (...args: Parameters<typeof gtao.render>) => {
   shafts.visible = dust.visible = true;
 };
 composer.addPass(gtao);
+composer.addPass(sanitize());
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.25, 0.5, 0.92);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
+// A faint vignette and film grain: the eye reads it as "photographed" rather than "rendered".
+const film = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, time: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float time; varying vec2 vUv;
+    float rand(vec2 co){ return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main(){ vec4 c = texture2D(tDiffuse, vUv);
+      vec2 d = vUv - 0.5; float v = 1.0 - dot(d, d) * 0.55;
+      float g = (rand(vUv * 1000.0 + time) - 0.5) * 0.025;
+      gl_FragColor = vec4(c.rgb * v + g, c.a); }`,
+});
+composer.addPass(film);
+
+// Reflections from a real panoramic photo (Poly Haven, CC0): brass, glass and varnish catch real light.
+new HDRLoader().load(`${import.meta.env.BASE_URL}env/quarry_01_1k.hdr`, (hdr) => {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromEquirectangular(hdr).texture;
+  hdr.dispose();
+  pmrem.dispose();
+});
+
+let postEnabled = true;
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -279,6 +322,14 @@ window.addEventListener('keydown', (e) => {
     if (n >= 0 && n < PRESETS.length) applyPreset(n);
   }
   if (e.code === 'KeyE') inspect();
+  if (e.code === 'KeyO') {
+    gtao.enabled = !gtao.enabled;
+    say(gtao.enabled ? 'Occlusione ambientale: accesa.' : 'Occlusione ambientale: spenta.');
+  }
+  if (e.code === 'KeyP') {
+    postEnabled = !postEnabled;
+    say(postEnabled ? 'Effetti di immagine: accesi.' : 'Effetti di immagine: spenti.');
+  }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
 
@@ -318,7 +369,11 @@ function inspect(): void {
   const hit = ray.intersectObjects(room.group.children, true)[0];
   const key = hit?.object.userData.inspect as string | undefined;
   if (!key) return;
-  hud.toast.textContent = BOTTEGA_INSPECT[key] ?? '';
+  say(BOTTEGA_INSPECT[key] ?? '');
+}
+
+function say(text: string): void {
+  hud.toast.textContent = text;
   hud.toast.classList.add('show');
   window.clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => hud.toast.classList.remove('show'), 7000);
@@ -359,7 +414,9 @@ function frame(): void {
     crossT = 0;
     updateCrosshair();
   }
-  composer.render(dt);
+  film.uniforms.time.value = t % 100;
+  if (postEnabled) composer.render(dt);
+  else renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 

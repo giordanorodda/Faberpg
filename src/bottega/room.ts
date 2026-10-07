@@ -3,7 +3,7 @@ import { makeRng } from '../core/rng';
 import * as F from './fantasy';
 import * as P from './props';
 import { box, inspectable, MAT, shadowed } from './props';
-import { material, planks, plaster, stone } from './textures';
+import { material, texSet } from './textures';
 
 /** Room size in meters. The front wall (with door and window) faces south, towards +z. */
 export const ROOM = { w: 7, d: 5.5, h: 3.1, wall: 0.35 };
@@ -57,7 +57,8 @@ function wallWithOpenings(length: number, height: number, thick: number, opening
     const pieces: [number, number][] = o ? [[0, o.y0], [o.y1, height]] : [[0, height]];
     for (const [y0, y1] of pieces) {
       if (y1 - y0 < 0.001) continue;
-      const m = box(b - a, y1 - y0, thick, mat, 0.6);
+      // wall pieces butt against each other: no rounding, or the seams would show
+      const m = box(b - a, y1 - y0, thick, mat, 0.6, false);
       m.position.set(mid, (y0 + y1) / 2, 0);
       g.add(m);
     }
@@ -111,14 +112,13 @@ export function buildRoom(): Room {
     colliders.push({ minX: cx - sx / 2, maxX: cx + sx / 2, minZ: cz - sz / 2, maxZ: cz + sz / 2 });
 
   // --- floor, walls, ceiling
-  const floorTex = planks(7, { base: [158, 100, 56], boards: 6, worn: true });
-  for (const t of [floorTex.map, floorTex.bumpMap, floorTex.roughnessMap]) t.repeat.set(w / 1.2, d / 2.4);
+  const floorTex = texSet('floor', [w / 1.2, d / 2.4]);
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), material(floorTex, { bump: 2.5 }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   group.add(floor);
 
-  const wallMat = material(plaster(3, [1, 1]), { bump: 1.2 });
+  const wallMat = material(texSet('plaster'), { bump: 1.2 });
   const front: Opening[] = [
     { x0: -2.4, x1: -0.9, y0: 0.9, y1: 2.15 },
     { x0: 1.05, x1: 2.15, y0: 0, y1: 2.25 },
@@ -154,7 +154,7 @@ export function buildRoom(): Room {
   }
 
   // half-timbered walls on a stone plinth
-  const plinthMat = material(stone(9, [1, 1]), { bump: 2 });
+  const plinthMat = material(texSet('plinth'), { bump: 2 });
   const frontLocal = front.map((o) => ({ ...o, x0: -o.x1, x1: -o.x0 }));
   const frames: [number, number, number, number, number, typeof front][] = [
     // length, x, z, rotationY, (unused), openings in frame-local coordinates
@@ -170,8 +170,7 @@ export function buildRoom(): Room {
     group.add(fr);
   }
 
-  const ceilTex = planks(17, { base: [96, 66, 42], boards: 8 });
-  for (const t of [ceilTex.map, ceilTex.bumpMap, ceilTex.roughnessMap]) t.repeat.set(w / 1.6, d / 3);
+  const ceilTex = texSet('ceiling', [w / 1.6, d / 3]);
   const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(w + wall * 2, d + wall * 2), material(ceilTex));
   ceiling.rotation.x = Math.PI / 2;
   ceiling.position.y = h;
@@ -190,7 +189,7 @@ export function buildRoom(): Room {
   }
 
   // threshold stone at the door
-  const sill = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.03, wall + 0.1), material(stone(5, [1, 0.4])));
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.03, wall + 0.1), material(texSet('threshold', [1, 0.4])));
   sill.position.set(1.6, 0.015, d / 2 + wall / 2);
   sill.receiveShadow = true;
   group.add(sill);
@@ -395,6 +394,39 @@ export function buildRoom(): Room {
   const lamp = P.oilLamp();
   lamp.group.position.set(-0.8, h - 0.74, -1.0);
   group.add(inspectable(lamp.group, 'lampada'));
+
+  // --- everyday clutter: what makes a shop look used, not staged
+  const rg = P.rug(2.4, 1.3);
+  rg.position.set(-0.7, 0.006, -0.12);
+  group.add(rg);
+  const ladder = P.ladder(2.6);
+  ladder.position.set(1.95, 0, -2.05);
+  ladder.rotation.x = -0.14;
+  group.add(ladder);
+  addCollider(1.95, -2.1, 0.5, 0.25);
+  const apples = P.basket(71, 'mele');
+  apples.position.set(-2.45, 0, 0.9);
+  group.add(inspectable(apples, 'mele'));
+  addCollider(-2.45, 0.9, 0.42, 0.42);
+  const onions = P.basket(72, 'cipolle');
+  onions.position.set(-2.25, 0, 1.45);
+  group.add(inspectable(onions, 'cipolle'));
+  addCollider(-2.25, 1.45, 0.42, 0.42);
+  for (let i = 0; i < 3; i++) {
+    const b = P.braid(90 + i, i !== 1);
+    b.position.set(-w / 2 + 0.14, 2.55, 1.5 + i * 0.32);
+    group.add(inspectable(b, 'trecce'));
+  }
+  const ch = P.cheeses();
+  ch.position.set(shelfX0 + 4.35, shelfLevels[3] + 0.018, shelfZ - 0.02);
+  group.add(inspectable(ch, 'formaggi'));
+  const pk = P.packets(14, 6);
+  pk.position.set(shelfX0 + 1.0, shelfLevels[4] + 0.018, shelfZ);
+  group.add(inspectable(pk, 'pacchetti'));
+  const pk2 = P.packets(15, 3);
+  pk2.position.set(-2.55, ctrTop, -0.98);
+  pk2.rotation.y = 0.3;
+  group.add(inspectable(pk2, 'pacchetti'));
 
   // --- the slow-fantasy things
   const chand = F.chandelier();

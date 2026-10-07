@@ -49,8 +49,14 @@ export interface TextureSet {
 
 type Pixel = (u: number, v: number) => { r: number; g: number; b: number; h: number; rough: number };
 
+export interface Canvases {
+  color: HTMLCanvasElement;
+  height: HTMLCanvasElement;
+  rough: HTMLCanvasElement;
+}
+
 /** Renders color, height and roughness from a single per-pixel function. */
-function bake(size: number, pixel: Pixel, repeat: [number, number] = [1, 1]): TextureSet {
+function bake(size: number, pixel: Pixel): Canvases {
   const mk = () => {
     const c = document.createElement('canvas');
     c.width = c.height = size;
@@ -81,21 +87,13 @@ function bake(size: number, pixel: Pixel, repeat: [number, number] = [1, 1]): Te
   cc.getContext('2d')!.putImageData(cd, 0, 0);
   hc.getContext('2d')!.putImageData(hd, 0, 0);
   rc.getContext('2d')!.putImageData(rd, 0, 0);
-  const tex = (c: HTMLCanvasElement, srgb: boolean) => {
-    const t = new THREE.CanvasTexture(c);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(repeat[0], repeat[1]);
-    t.anisotropy = 8;
-    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  };
-  return { map: tex(cc, true), bumpMap: tex(hc, false), roughnessMap: tex(rc, false) };
+  return { color: cc, height: hc, rough: rc };
 }
 
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /** Floorboards: long planks of slightly different tones, with grain, knots and dark gaps. */
-export function planks(seed: number, opts: { base: [number, number, number]; boards: number; worn?: boolean }): TextureSet {
+function planks(seed: number, opts: { base: [number, number, number]; boards: number; worn?: boolean; size?: number }): Canvases {
   const grain = makeFbm(seed, 4, 4);
   const fine = makeFbm(seed + 7, 64, 2);
   const rnd = makeRng(seed);
@@ -103,7 +101,7 @@ export function planks(seed: number, opts: { base: [number, number, number]; boa
   const boardOffset = Array.from({ length: opts.boards }, () => rnd());
   const knots = Array.from({ length: opts.boards * 2 }, () => ({ b: Math.floor(rnd() * opts.boards), v: rnd(), r: 0.006 + rnd() * 0.01 }));
   const wear = makeFbm(seed + 3, 2, 3);
-  return bake(1024, (u, v) => {
+  return bake(opts.size ?? 1024, (u, v) => {
     const bu = u * opts.boards;
     const b = Math.floor(bu);
     const local = bu - b;
@@ -131,32 +129,32 @@ export function planks(seed: number, opts: { base: [number, number, number]; boa
       h: 0.55 + lines * 0.25 - k * 0.2,
       rough: 0.62 + lines * 0.12 - w * 0.25,
     };
-  }, [1, 1]);
+  });
 }
 
 /** Lime plaster: warm off-white, uneven, with damp stains near the floor. */
-export function plaster(seed: number, repeat: [number, number]): TextureSet {
+function plaster(seed: number): Canvases {
   const big = makeFbm(seed, 3, 4);
   const small = makeFbm(seed + 11, 48, 3);
   const cracks = makeFbm(seed + 23, 12, 3);
   const crackMask = makeFbm(seed + 29, 2, 2);
-  return bake(1024, (u, v) => {
+  return bake(2048, (u, v) => {
     const n = big(u, v);
     const s = small(u, v);
     // hairline cracks, only in a few patches of the wall
     const c = crackMask(u, v) > 0.62 && Math.abs(cracks(u, v) - 0.5) < 0.0022 ? 1 : 0;
     const t = 0.86 + n * 0.12 + s * 0.06 - c * 0.07;
     return { r: 228 * t, g: 208 * t, b: 172 * t, h: 0.5 + s * 0.4 - c * 0.4, rough: 0.92 };
-  }, repeat);
+  });
 }
 
 /** Rough stone flags for the threshold and the hearth. */
-export function stone(seed: number, repeat: [number, number]): TextureSet {
+function stone(seed: number, size = 512): Canvases {
   const n = makeFbm(seed, 6, 5);
   const cellN = 5;
   const rnd = makeRng(seed);
   const pts = Array.from({ length: cellN * cellN }, (_, i) => ({ x: ((i % cellN) + 0.2 + rnd() * 0.6) / cellN, y: (Math.floor(i / cellN) + 0.2 + rnd() * 0.6) / cellN, t: 0.8 + rnd() * 0.3 }));
-  return bake(512, (u, v) => {
+  return bake(size, (u, v) => {
     // Voronoi cells, wrapped so the texture tiles.
     let d1 = 9;
     let d2 = 9;
@@ -177,29 +175,63 @@ export function stone(seed: number, repeat: [number, number]): TextureSet {
     const t = tone * (0.75 + n(u, v) * 0.4);
     if (edge) return { r: 70, g: 66, b: 60, h: 0, rough: 1 };
     return { r: 148 * t, g: 134 * t, b: 114 * t, h: 0.6 + n(u, v) * 0.4, rough: 0.85 };
-  }, repeat);
+  });
 }
 
 /** Plain wood for furniture: quieter grain, no gaps. */
-export function wood(seed: number, base: [number, number, number], repeat: [number, number] = [1, 1]): TextureSet {
+function wood(seed: number, base: [number, number, number]): Canvases {
   const grain = makeFbm(seed, 3, 4);
   const fine = makeFbm(seed + 5, 80, 2);
-  return bake(512, (u, v) => {
+  return bake(1024, (u, v) => {
     const g = grain(u * 0.6, v * 1.5);
     const lines = Math.sin((u * 36 + g * 5) * Math.PI) * 0.5 + 0.5;
     const t = 0.84 + lines * 0.07 + fine(u, v) * 0.06 + g * 0.1;
     return { r: base[0] * t, g: base[1] * t, b: base[2] * t, h: 0.5 + lines * 0.3, rough: 0.55 + lines * 0.15 };
-  }, repeat);
+  });
 }
 
 /** Coarse jute for the sacks. */
-export function burlap(seed: number): TextureSet {
+function burlap(seed: number): Canvases {
   const n = makeFbm(seed, 4, 3);
-  return bake(256, (u, v) => {
+  return bake(512, (u, v) => {
     const weave = (Math.sin(u * 2 * Math.PI * 40) * Math.sin(v * 2 * Math.PI * 40)) * 0.5 + 0.5;
     const t = 0.8 + weave * 0.15 + n(u, v) * 0.15;
     return { r: 176 * t, g: 148 * t, b: 102 * t, h: weave, rough: 1 };
-  }, [2, 2]);
+  });
+}
+
+/**
+ * Every material of the shop, by name. Generating them takes seconds, so
+ * they are baked once into image files (npm run bake) under
+ * public/textures/, and the game only loads the images. To use a real
+ * photographed material instead, replace the three files of a name.
+ */
+export const RECIPES: Record<string, () => Canvases> = {
+  floor: () => planks(7, { base: [158, 100, 56], boards: 6, worn: true, size: 2048 }),
+  ceiling: () => planks(17, { base: [96, 66, 42], boards: 8 }),
+  plaster: () => plaster(3),
+  threshold: () => stone(5, 512),
+  plinth: () => stone(9, 1024),
+  woodDark: () => wood(31, [92, 62, 38]),
+  woodMid: () => wood(32, [128, 88, 52]),
+  woodPale: () => wood(33, [170, 130, 86]),
+  staves: () => wood(51, [120, 82, 48]),
+  burlap: () => burlap(41),
+};
+
+const loader = new THREE.TextureLoader();
+
+/** Loads a baked material by name, tiled `repeat` times. */
+export function texSet(name: string, repeat: [number, number] = [1, 1]): TextureSet {
+  const load = (kind: 'color' | 'height' | 'rough', srgb: boolean) => {
+    const t = loader.load(`${import.meta.env.BASE_URL}textures/${name}_${kind}.jpg`);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(repeat[0], repeat[1]);
+    t.anisotropy = 8;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  };
+  return { map: load('color', true), bumpMap: load('height', false), roughnessMap: load('rough', false) };
 }
 
 /** A single texture with text written by hand on wood or paper. */
