@@ -8,6 +8,7 @@ import { wonkify } from '../bottega/style';
 import { apple, bentBox, bowl, broom, cup, garlicBraid, glass, herbBunch, jug, M, nail, organic, plankFloor, rbox, shadowed, toon, toonify, wallSkin } from '../stile/kit';
 import type { WallOptions } from '../stile/paint';
 import { flushBookAtlas, makeBook } from './books';
+import { Cat, type CatSpot } from './cat';
 import * as De from './details';
 import * as Fu from './furniture';
 import { buildKitchen, gatheredCurtain, KITCHEN_WINDOW } from './kitchen';
@@ -87,7 +88,8 @@ export interface House {
   lights: Light[];
   embers: THREE.MeshToonMaterial;
   living: THREE.Object3D[];
-  cat: { breathe: (t: number) => void; at: THREE.Vector3 };
+  cat: Cat;
+  catSpots: Record<string, CatSpot>;
   /** Where the armchair seat is, and which way it faces (yaw). */
   seat: { at: THREE.Vector3; yaw: number };
   bedside: { at: THREE.Vector3; yaw: number };
@@ -787,21 +789,17 @@ export function buildHouse(): House {
   }
 
   // ------------------------------------------------------------ the bedroom
-  let cat: { breathe: (t: number) => void; at: THREE.Vector3 } = { breathe: () => {}, at: new THREE.Vector3() };
+  const bedSpot = new THREE.Vector3();
   {
     const b = Fu.bed();
     b.group.position.set(-1.95, UP, 1.4);
     group.add(tag(b.group, 'letto'));
     box(-1.95, 1.4, 2.05, 1.4, 1);
-    // the cat has found the warmest place on the quilt
-    const c = Fu.sleepingCat();
+    // where the cat sleeps in the afternoon: the warmest place on the quilt
     b.group.updateMatrixWorld(true);
     const ray = new THREE.Raycaster(new THREE.Vector3(-1.45, UP + 2, 1.62), new THREE.Vector3(0, -1, 0));
     const hit = ray.intersectObject(b.quilt)[0];
-    c.group.position.set(-1.45, hit ? hit.point.y - 0.03 : UP + 0.6, 1.62);
-    c.group.rotation.y = 2.3;
-    group.add(tag(c.group, 'gatto'));
-    cat = { breathe: c.breathe, at: c.group.position.clone() };
+    bedSpot.set(-1.45, hit ? hit.point.y - 0.03 : UP + 0.6, 1.62);
     const ch = Fu.chest();
     ch.position.set(-0.68, UP, 1.4);
     ch.rotation.y = 0.04;
@@ -888,6 +886,19 @@ export function buildHouse(): House {
     living.push(pot);
   }
 
+  // the cat and the places of its day
+  const seatAt0 = chairAt.clone();
+  const fwd = new THREE.Vector3(Math.sin(chairYaw), 0, Math.cos(chairYaw));
+  const catSpots: Record<string, CatSpot> = {
+    ciotola: { name: 'ciotola', at: new THREE.Vector3(-1.75, 0, -1.38), yaw: Math.PI - 0.3, pose: 'loaf', line: 'Seduto davanti alla ciotola, gli occhi socchiusi. Aspetta. Non dice cosa.' },
+    panca: { name: 'panca', at: new THREE.Vector3(2.62, 0.47, 1.0), yaw: Math.PI / 2 + 0.2, pose: 'loaf', line: 'Sulla panca, nel sole della mattina. Fa le fusa a occhi chiusi, per conto suo.' },
+    letto: { name: 'letto', at: bedSpot.clone(), yaw: 2.3, pose: 'curled', line: 'Dorme sul tuo letto, nel punto più caldo della trapunta. Non è tuo, dice Ada: è il gatto della casa, e la casa adesso è tua.' },
+    poltrona: { name: 'poltrona', at: seatAt0.clone().addScaledVector(fwd, 0.04).setY(0.46), yaw: chairYaw + 1.2, pose: 'curled', line: 'Ti ha preso la poltrona. È calda, dice la sua faccia, e lui c\'era prima.' },
+    grembo: { name: 'grembo', at: seatAt0.clone().addScaledVector(fwd, 0.36).setY(0.64), yaw: chairYaw + 2.0, pose: 'curled', line: 'Ti dorme in grembo. Pesa più di quanto sembri. Non ti alzerai per un po\'.' },
+    tappeto: { name: 'tappeto', at: new THREE.Vector3(-1.72, 0.01, 0.15), yaw: -0.6, pose: 'curled', line: 'Acciambellato sul tappeto davanti al fuoco. Ogni tanto un orecchio si gira verso il crepitio.' },
+  };
+  const cat = new Cat(catSpots.letto);
+  group.add(tag(cat.group, 'gatto'));
   flushBookAtlas();
   // Everything a little crooked, as if built by hand.
   wonkify(group, 0.5);
@@ -901,6 +912,7 @@ export function buildHouse(): House {
     embers: hearth.embers,
     living,
     cat,
+    catSpots,
     seat: { at: seatAt, yaw: chairYaw + Math.PI },
     bedside: { at: new THREE.Vector3(-0.85, UP, 0.55), yaw: Math.PI * 0.6 },
   };

@@ -294,6 +294,7 @@ function floorAt(x: number, z: number, y: number): number | null {
 }
 
 let seated: { back: THREE.Vector3 } | null = null;
+let seatedFor = 0;
 let bobT = 0;
 let lastStair = -1;
 /** What is underfoot here: the stair, the hearthstone, a rug, or the boards. */
@@ -322,9 +323,13 @@ function move(dt: number): void {
   if (reader.isOpen || choosing) return;
   if (seated) {
     if (controls.isLocked && (f !== 0 || s !== 0)) {
-      // stand up again
+      // stand up again; if the cat was on your lap, it keeps the warm chair
       camera.position.copy(seated.back);
       seated = null;
+      if (house.cat.spot.name === 'grembo') {
+        house.cat.set(house.catSpots.poltrona);
+        say('Il gatto scende, offeso, e si prende la poltrona ancora calda.');
+      }
     }
     return;
   }
@@ -388,6 +393,8 @@ function interact(): void {
     openShelf();
   } else if (key === 'letto' && lastKey === 'letto' && !sleeping) {
     sleeping = 0.0001;
+  } else if (key === 'gatto') {
+    say(house.cat.spot.line);
   } else say(CASA_INSPECT[key] ?? '');
   lastKey = key;
 }
@@ -415,19 +422,31 @@ function frame(): void {
     for (const m of f.def.flames) m.visible = f.lit;
     // a flame never holds still: two or three rhythms that never line up
     const flick = 1 + Math.sin(t * 9.3 + f.def.at.x) * 0.06 + Math.sin(t * 23.1 + f.def.at.z) * 0.04 + (fire ? Math.sin(t * 3.7) * 0.08 : 0);
-    const base = fire ? (p.night ? 3.6 : 1.4) : 1.3;
+    const base = fire ? (p.night ? 3.0 : 1.4) : 1.3;
     f.light.intensity = f.lit ? base * flick : 0;
     // only the flames on your floor cast shadows (the others cannot reach you anyway)
     f.light.castShadow = f.lit && (fire || f.def.level === level);
     if (fire) f.light.position.set(f.def.at.x + Math.sin(t * 5.1) * 0.03, f.def.at.y + Math.sin(t * 7.3) * 0.02, f.def.at.z + Math.sin(t * 4.3) * 0.04);
   }
   house.embers.emissiveIntensity = 1.0 + Math.sin(t * 2.3) * 0.25 + Math.sin(t * 5.7) * 0.1;
-  house.cat.breathe(t);
+  // the cat's day, from the clock; it moves only when you are not looking
+  {
+    if (seated) seatedFor += dt;
+    else seatedFor = 0;
+    const evening = preset >= 3;
+    let want = house.catSpots[['ciotola', 'panca', 'letto', 'poltrona', 'tappeto'][preset]];
+    if (want.name === 'poltrona' && seated) want = house.catSpots.tappeto;
+    if (evening && seated && seatedFor > 15 && house.cat.spot.name !== 'grembo') {
+      house.cat.set(house.catSpots.grembo);
+      say('Un peso morbido ti sale sulle ginocchia, gira due volte su se stesso, e si sistema.');
+    } else if (house.cat.spot.name !== 'grembo' || !seated) house.cat.update(t, house.cat.spot.name === 'grembo' ? house.catSpots.poltrona : want, camera);
+    else house.cat.update(t, house.catSpots.grembo, camera);
+  }
   {
     const fireAt = flames.find((f) => f.def.kind === 'fire')!.light.position;
     const df = camera.position.distanceTo(fireAt);
     const fire = level === 1 ? 0.12 : Math.pow(Math.max(0, 1 - df / 7), 1.4);
-    const purr = Math.max(0, 1 - camera.position.distanceTo(house.cat.at) / 1.5);
+    const purr = Math.max(0, 1 - camera.position.distanceTo(house.cat.group.position) / 1.5);
     sound.setScene(fire, p.night, purr);
     sound.update();
   }
@@ -479,6 +498,8 @@ const params = new URLSearchParams(location.search);
 const byName = PRESETS.findIndex((q) => q.name.toLowerCase() === (params.get('ora') ?? '').toLowerCase());
 const hour = new Date().getHours();
 applyPreset(byName >= 0 ? byName : hour < 7 ? 0 : hour < 13 ? 1 : hour < 18 ? 2 : hour < 21 ? 3 : 4);
+// the cat starts the day where the hour says
+house.cat.set(house.catSpots[['ciotola', 'panca', 'letto', 'poltrona', 'tappeto'][preset]]);
 // the house remembers where things were left, and which candles were burning
 const memory = new HouseMemory(house.movables, () => Object.fromEntries(flames.filter((f) => f.def.key).map((f) => [f.def.key!, f.lit])));
 if (!params.has('nuova')) {
@@ -503,7 +524,10 @@ requestAnimationFrame(frame);
     camera.rotation.set(-0.3, house.seat.yaw, 0, 'YXZ');
     hud.intro.style.display = 'none';
   },
-  time: applyPreset,
+  time: (i: number) => {
+    applyPreset(i);
+    house.cat.set(house.catSpots[['ciotola', 'panca', 'letto', 'poltrona', 'tappeto'][i]]);
+  },
   carry,
   house,
   sound,
