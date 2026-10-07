@@ -113,7 +113,7 @@ export function planks(seed: number, opts: { base: [number, number, number]; boa
     // grain: stretched noise along the plank
     // grain runs along the plank: lines across the board, gently wavy
     const g = grain(u * 0.5 + b * 0.37, v * 2 + boardOffset[b]);
-    const lines = Math.sin((local * 16 + g * 4 + b) * Math.PI) * 0.5 + 0.5;
+    const lines = Math.sin((local * 16 + g * 2 + b) * Math.PI) * 0.5 + 0.5;
     let k = 0;
     for (const kn of knots) {
       if (kn.b !== b) continue;
@@ -146,7 +146,7 @@ export function plaster(seed: number, repeat: [number, number]): TextureSet {
     // hairline cracks, only in a few patches of the wall
     const c = crackMask(u, v) > 0.62 && Math.abs(cracks(u, v) - 0.5) < 0.0022 ? 1 : 0;
     const t = 0.86 + n * 0.12 + s * 0.06 - c * 0.07;
-    return { r: 222 * t, g: 210 * t, b: 186 * t, h: 0.5 + s * 0.4 - c * 0.4, rough: 0.92 };
+    return { r: 228 * t, g: 208 * t, b: 172 * t, h: 0.5 + s * 0.4 - c * 0.4, rough: 0.92 };
   }, repeat);
 }
 
@@ -176,7 +176,7 @@ export function stone(seed: number, repeat: [number, number]): TextureSet {
     const edge = d2 - d1 < 0.012;
     const t = tone * (0.75 + n(u, v) * 0.4);
     if (edge) return { r: 70, g: 66, b: 60, h: 0, rough: 1 };
-    return { r: 150 * t, g: 144 * t, b: 134 * t, h: 0.6 + n(u, v) * 0.4, rough: 0.85 };
+    return { r: 148 * t, g: 134 * t, b: 114 * t, h: 0.6 + n(u, v) * 0.4, rough: 0.85 };
   }, repeat);
 }
 

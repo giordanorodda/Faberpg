@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeRng } from '../core/rng';
+import * as F from './fantasy';
 import * as P from './props';
 import { box, inspectable, MAT, shadowed } from './props';
 import { material, planks, plaster, stone } from './textures';
@@ -28,6 +29,12 @@ export interface Room {
   /** World-space rectangles of the openings the sun can shine through. */
   windows: THREE.Vector3[][];
   lampFlames: THREE.Mesh[];
+  /** Candles of the chandelier, lit together with the lamp. */
+  chandelierFlames: THREE.Mesh[];
+  chandelierAnchor: THREE.Vector3;
+  fireflies: { light: THREE.PointLight; update: (t: number, on: number) => void };
+  /** Faintly glowing things (tinctures, crystals): brighter in the dark. */
+  glows: THREE.MeshStandardMaterial[];
   lampAnchors: THREE.Vector3[];
   candleAnchor: THREE.Vector3;
   windowGlass: THREE.Mesh[];
@@ -87,8 +94,12 @@ function windowFrame(o: Opening, thick: number): { group: THREE.Group; glass: TH
   pane.castShadow = false;
   g.add(pane);
   glass.push(pane);
+  const lead = F.leadedGlass(w - 0.1, h - 0.1);
+  lead.position.set(cx, cy, 0.01);
+  g.add(lead);
   shadowed(g);
   pane.castShadow = false;
+  lead.castShadow = false;
   return { group: g, glass };
 }
 
@@ -100,7 +111,7 @@ export function buildRoom(): Room {
     colliders.push({ minX: cx - sx / 2, maxX: cx + sx / 2, minZ: cz - sz / 2, maxZ: cz + sz / 2 });
 
   // --- floor, walls, ceiling
-  const floorTex = planks(7, { base: [150, 104, 64], boards: 6, worn: true });
+  const floorTex = planks(7, { base: [158, 100, 56], boards: 6, worn: true });
   for (const t of [floorTex.map, floorTex.bumpMap, floorTex.roughnessMap]) t.repeat.set(w / 1.2, d / 2.4);
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), material(floorTex, { bump: 2.5 }));
   floor.rotation.x = -Math.PI / 2;
@@ -140,6 +151,23 @@ export function buildRoom(): Room {
     s.position.set(x, 0.07, z);
     s.rotation.y = ry;
     group.add(shadowed(s));
+  }
+
+  // half-timbered walls on a stone plinth
+  const plinthMat = material(stone(9, [1, 1]), { bump: 2 });
+  const frontLocal = front.map((o) => ({ ...o, x0: -o.x1, x1: -o.x0 }));
+  const frames: [number, number, number, number, number, typeof front][] = [
+    // length, x, z, rotationY, (unused), openings in frame-local coordinates
+    [w, 0, -d / 2, 0, 0, []],
+    [w, 0, d / 2, Math.PI, 0, frontLocal],
+    [d, -w / 2, 0, Math.PI / 2, 0, []],
+    [d, w / 2, 0, -Math.PI / 2, 0, east],
+  ];
+  for (const [len, x, z, ry, , ops] of frames) {
+    const fr = F.timberFrame(len, h, ops, plinthMat);
+    fr.position.set(x, 0, z);
+    fr.rotation.y = ry;
+    group.add(fr);
   }
 
   const ceilTex = planks(17, { base: [96, 66, 42], boards: 8 });
@@ -221,12 +249,13 @@ export function buildRoom(): Room {
   // shelving along the back wall
   const shelfLevels = [0.45, 0.95, 1.45, 1.95, 2.4];
   const shelves = P.shelving(5.6, 2.55, 0.38, shelfLevels);
-  shelves.position.set(-0.6, 0, -d / 2 + 0.2);
+  // set off the wall, clear of the timber frame and the stone plinth
+  shelves.position.set(-0.6, 0, -d / 2 + 0.32);
   group.add(shelves);
-  addCollider(-0.6, -d / 2 + 0.2, 5.7, 0.45);
+  addCollider(-0.6, -d / 2 + 0.32, 5.7, 0.45);
 
   const rnd = makeRng(99);
-  const shelfZ = -d / 2 + 0.22;
+  const shelfZ = -d / 2 + 0.34;
   const shelfX0 = -0.6 - 2.7;
   // jars on the first two shelves
   for (let level = 0; level < 2; level++) {
@@ -349,10 +378,9 @@ export function buildRoom(): Room {
   br.position.set(3.3, 0, 0.8);
   group.add(inspectable(br, 'scopa'));
 
-  // the sign on the east wall, above the window... no: on the west wall, where customers look
+  // the sign hangs on the front of the counter, right where customers stand
   const sg = P.sign('Si guarda con gli occhi.');
-  sg.position.set(-w / 2 + 0.02, 1.85, 0.3);
-  sg.rotation.y = Math.PI / 2;
+  sg.position.set(-0.7, 0.72, -1.15 + 0.31);
   group.add(inspectable(sg, 'cartello'));
 
   // dried herbs from the beams
@@ -368,9 +396,54 @@ export function buildRoom(): Room {
   lamp.group.position.set(-0.8, h - 0.74, -1.0);
   group.add(inspectable(lamp.group, 'lampada'));
 
+  // --- the slow-fantasy things
+  const chand = F.chandelier();
+  const chandelierAnchor = new THREE.Vector3(0.8, h - 0.24 - 0.72, 0.9);
+  chand.group.position.copy(chandelierAnchor);
+  group.add(inspectable(chand.group, 'lampadario'));
+
+  const glows: THREE.MeshStandardMaterial[] = [];
+  for (let i = 0; i < 5; i++) {
+    const t = F.tincture(200 + i * 7);
+    t.group.position.set(shelfX0 + 4.5 + i * 0.19, shelfLevels[2] + 0.018, shelfZ + (i % 2) * 0.06 - 0.03);
+    group.add(inspectable(t.group, 'tinture'));
+    glows.push(t.liquid);
+  }
+  const cr = F.crystals();
+  cr.group.position.set(shelfX0 + 4.6, shelfLevels[4] + 0.018, shelfZ);
+  group.add(inspectable(cr.group, 'cristalli'));
+  glows.push(cr.mat);
+
+  const jarF = F.fireflyJar();
+  jarF.group.position.set(0.8, ctrTop, -1.32);
+  jarF.group.scale.setScalar(0.8);
+  group.add(inspectable(jarF.group, 'lucciole'));
+
+  const map = F.woodsMap();
+  map.position.set(-0.62, ctrTop, -1.08);
+  map.rotation.y = -0.08;
+  group.add(inspectable(map, 'mappa'));
+
+  const ss = F.shieldAndSword();
+  ss.position.set(-w / 2 + 0.1, 1.72, -1.15);
+  ss.rotation.y = Math.PI / 2;
+  group.add(inspectable(ss, 'scudo'));
+
+  const rope = F.ropeCoil();
+  rope.position.set(3.1, 0, 1.1);
+  group.add(inspectable(rope, 'corda'));
+  addCollider(3.1, 1.1, 0.3, 0.3);
+  const lan = F.lantern();
+  lan.position.set(2.95, 0.72, 1.85);
+  group.add(inspectable(lan, 'lanterna'));
+
   return {
     group,
     colliders,
+    chandelierFlames: chand.flames,
+    chandelierAnchor,
+    fireflies: { light: jarF.light, update: jarF.update },
+    glows,
     windows,
     lampFlames: [lamp.flame, cs.flame],
     lampAnchors: [new THREE.Vector3(-0.8, h - 0.72, -1.0)],

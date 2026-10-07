@@ -84,6 +84,9 @@ lamp.shadow.mapSize.set(512, 512);
 lamp.shadow.bias = -0.002;
 lamp.shadow.radius = 4;
 scene.add(lamp);
+const chandelierLight = new THREE.PointLight(0xffb868, 0, 8, 1.6);
+chandelierLight.position.copy(room.chandelierAnchor).add(new THREE.Vector3(0, 0.15, 0));
+scene.add(chandelierLight);
 const candle = new THREE.PointLight(0xffa850, 0, 4, 1.8);
 candle.position.copy(room.candleAnchor);
 scene.add(candle);
@@ -185,6 +188,7 @@ const PRESETS: Preset[] = [
   { name: 'Notte', azimuth: 200, elevation: 35, sunColor: 0x8aa0d0, sunIntensity: 0.12, sky: 0.04, lamps: true, turbidity: 2, exposure: 1.1 },
 ];
 let presetIndex = 1;
+let firefliesOn = 0;
 const dirToSun = new THREE.Vector3();
 
 function applyPreset(i: number): void {
@@ -213,7 +217,11 @@ function applyPreset(i: number): void {
   bounce.color.setHex(i === 3 ? 0xffb080 : 0xffd8a8);
   lamp.intensity = p.lamps ? (night ? 7 : 4) : 0;
   candle.intensity = p.lamps ? 1.6 : 0;
-  for (const f of room.lampFlames) f.visible = p.lamps;
+  for (const f of [...room.lampFlames, ...room.chandelierFlames]) f.visible = p.lamps;
+  chandelierLight.intensity = p.lamps ? (night ? 4 : 2.5) : 0;
+  // faint glows: barely there by day, noticeable in the dark
+  for (const m of room.glows) m.emissiveIntensity = night ? 1.1 : i === 3 || i === 0 ? 0.55 : 0.2;
+  firefliesOn = night ? 1 : i === 3 ? 0.6 : 0.15;
   renderer.toneMappingExposure = p.exposure;
   shaftMat.uniforms.strength.value = night ? 0.0 : i === 1 || i === 2 ? 0.045 : 0.07;
   shaftMat.uniforms.color.value.setHex(p.sunColor);
@@ -344,6 +352,8 @@ function frame(): void {
     lamp.intensity = (presetIndex === 4 ? 7 : 4) * flick;
     candle.intensity = 1.6 * (1 + Math.sin(t * 17 + 1) * 0.08);
   }
+  room.fireflies.update(t, firefliesOn);
+  if (chandelierLight.intensity > 0) chandelierLight.intensity = (presetIndex === 4 ? 4 : 2.5) * (1 + Math.sin(t * 11 + 2) * 0.05);
   crossT += dt;
   if (crossT > 0.15) {
     crossT = 0;

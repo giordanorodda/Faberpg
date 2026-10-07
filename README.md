@@ -51,6 +51,7 @@ Un esperimento separato, per valutare l'aspetto grafico di un gioco in 3D con vi
 
 - WASD per camminare, mouse per guardare, E per osservare le cose (il registro, il cartello, la bilancia...).
 - Tasti 1–5: alba, mattina, pomeriggio, tramonto, notte. La luce del sole entra dalle finestre e dalla porta; la sera si accendono la lucerna e la candela.
+- Lo stile è "slow fantasy": muri a graticcio su zoccolo di pietra, vetri a losanghe, un lampadario di ferro battuto, tinture d'erbe che al buio brillano appena, un barattolo di lucciole, la mappa del bosco bianca oltre il fosso.
 - Tutto è costruito dal codice (Three.js): geometrie semplici e materiali procedurali, senza file di immagini. Con asset veri (texture fotografiche, modelli) il dettaglio salirebbe molto.
 
 Il codice è in `src/bottega/`, i testi da osservare in `src/data/bottega.ts`. Gli screenshot automatici: `npx tsx scripts/bottega-shot.ts`.

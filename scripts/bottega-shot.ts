@@ -19,6 +19,9 @@ const shots: [string, string, number, number, number, number][] = [
   ['b4-notte', 'notte', 1.0, 1.2, 20, -10],
   ['b5-registro', 'pomeriggio', 0.0, -0.45, 0, -55],
   ['b6-porta', 'pomeriggio', -0.4, 0.2, 165, -4],
+  ['b7-notte-scaffali', 'notte', 2.6, 0.4, 25, 4],
+  ['b8-bancone-tramonto', 'tramonto', 0.1, -0.35, 15, -42],
+  ['b9-parete-ovest', 'mattina', 0.6, 0.6, 90, 2],
 ];
 for (const [name, ora, x, z, yaw, pitch] of shots) {
   await page.goto(`${base}bottega.html?ora=${ora}`);

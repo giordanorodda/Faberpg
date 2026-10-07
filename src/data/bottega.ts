@@ -21,5 +21,15 @@ export const BOTTEGA_INSPECT: Record<string, string> = {
   finestra: 'Fuori, la strada che porta alla piazza. Il vetro è un po\' storto: le cose, dietro, ondeggiano appena.',
   porta: 'La porta è aperta sulla strada. Per ora, la bottega finisce qui.',
   scopa: 'Una scopa di saggina appoggiata al muro. Le setole sono consumate tutte da una parte.',
+  lampadario: 'Un cerchio di ferro battuto con sei candele, consumate ognuna a modo suo. Ottavio dice che l\'ha forgiato un fabbro di passaggio, e che non ha voluto essere pagato.',
+  tinture:
+    'Tinture d\'erbe in fiaschette rotonde: per la tosse, per il sonno, per le febbri di stagione. Non sono pozioni, dice Teresa. Ma quella azzurra, al buio, si vede.',
+  cristalli: 'Un sasso pieno di cristalli chiari. L\'ha portato Bruna da oltre il fosso, anni fa. Teresa non lo vende e non dice perché. Di notte sembra respirare.',
+  lucciole:
+    'Un barattolo di lucciole. Lino le raccoglie d\'estate; Teresa le vende a chi deve attraversare il bosco col buio. Quelle che nessuno compra, le lascia andare all\'alba.',
+  mappa: 'Una mappa del Bosco Basso disegnata a mano. Gli alberi, il sentiero, il fosso. Oltre il fosso il foglio è bianco, con un punto interrogativo piccolo, come per non disturbare.',
+  scudo: 'Uno scudo rotondo con un airone dipinto, sbiadito, e una spada corta. Erano di Gino. Non sono in vendita, e Teresa non ne parla.',
+  corda: 'Una matassa di corda di canapa. Chi va nel bosco profondo ne compra sempre un pezzo in più di quanto serva.',
+  lanterna: 'Una lanterna da viaggio, di ferro e vetro. Ha una piccola ammaccatura su un lato, come se fosse già stata da qualche parte.',
   calamaio: 'Un calamaio e una penna d\'oca. L\'inchiostro è quasi secco: Teresa scrive molto.',
 };
