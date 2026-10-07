@@ -10,6 +10,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { BOTTEGA_INSPECT } from '../data/bottega';
+import { gradeShader, outlineShader } from './style';
 import { buildOutside, buildRoom, ROOM, type Collider } from './room';
 
 // ------------------------------------------------------------------ renderer
@@ -59,7 +60,7 @@ sun.shadow.normalBias = 0.03;
 sun.shadow.radius = 3;
 scene.add(sun, sun.target);
 
-const hemi = new THREE.HemisphereLight(0xbfd4e8, 0x6a4a30, 0.4);
+const hemi = new THREE.HemisphereLight(0xa8b4e8, 0x7a4a30, 0.4);
 scene.add(hemi);
 
 // Skylight coming in through the openings (no shadows, soft).
@@ -211,7 +212,7 @@ function applyPreset(i: number): void {
   sky.visible = !night;
   scene.background = night ? new THREE.Color(0x0a1022) : null;
   hemi.intensity = 0.9 * p.sky + 0.04;
-  hemi.color.setHex(night ? 0x34406a : 0xbfd4e8);
+  hemi.color.setHex(night ? 0x34406a : 0xa8b4e8);
   for (const s of skyLights) {
     s.light.intensity = 7 * p.sky;
     s.light.color.setHex(night ? 0x5a6a9a : i === 3 || i === 0 ? 0xffc8a0 : 0xcfe0f0);
@@ -267,20 +268,21 @@ gtao.render = (...args: Parameters<typeof gtao.render>) => {
 };
 composer.addPass(gtao);
 composer.addPass(sanitize());
+// Ink outlines, from the depth and normals the AO pass has just rendered.
+const outline = new ShaderPass(outlineShader(camera));
+outline.uniforms.tDepth.value = gtao.depthTexture;
+outline.uniforms.tNormal.value = gtao.normalTexture;
+const setOutlineSize = () => {
+  const pr = renderer.getPixelRatio();
+  outline.uniforms.resolution.value.set(window.innerWidth * pr, window.innerHeight * pr);
+};
+setOutlineSize();
+composer.addPass(outline);
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.25, 0.5, 0.92);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
-// A faint vignette and film grain: the eye reads it as "photographed" rather than "rendered".
-const film = new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, time: { value: 0 } },
-  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float time; varying vec2 vUv;
-    float rand(vec2 co){ return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453); }
-    void main(){ vec4 c = texture2D(tDiffuse, vUv);
-      vec2 d = vUv - 0.5; float v = 1.0 - dot(d, d) * 0.55;
-      float g = (rand(vUv * 1000.0 + time) - 0.5) * 0.025;
-      gl_FragColor = vec4(c.rgb * v + g, c.a); }`,
-});
+// Final grade: violet shadows, golden lights, a little more color.
+const film = new ShaderPass(gradeShader);
 composer.addPass(film);
 
 // Reflections from a real panoramic photo (Poly Haven, CC0): brass, glass and varnish catch real light.
@@ -298,6 +300,7 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setSize(window.innerWidth, window.innerHeight);
+  setOutlineSize();
 });
 
 // ------------------------------------------------------------------ first person
@@ -324,6 +327,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyE') inspect();
   if (e.code === 'KeyO') {
     gtao.enabled = !gtao.enabled;
+    outline.enabled = gtao.enabled; // the outlines read the AO pass's depth and normals
     say(gtao.enabled ? 'Occlusione ambientale: accesa.' : 'Occlusione ambientale: spenta.');
   }
   if (e.code === 'KeyP') {

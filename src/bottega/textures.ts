@@ -92,104 +92,6 @@ function bake(size: number, pixel: Pixel): Canvases {
 
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 
-/** Floorboards: long planks of slightly different tones, with grain, knots and dark gaps. */
-function planks(seed: number, opts: { base: [number, number, number]; boards: number; worn?: boolean; size?: number }): Canvases {
-  const grain = makeFbm(seed, 4, 4);
-  const fine = makeFbm(seed + 7, 64, 2);
-  const rnd = makeRng(seed);
-  const boardTone = Array.from({ length: opts.boards }, () => 0.82 + rnd() * 0.3);
-  const boardOffset = Array.from({ length: opts.boards }, () => rnd());
-  const knots = Array.from({ length: opts.boards * 2 }, () => ({ b: Math.floor(rnd() * opts.boards), v: rnd(), r: 0.006 + rnd() * 0.01 }));
-  const wear = makeFbm(seed + 3, 2, 3);
-  return bake(opts.size ?? 1024, (u, v) => {
-    const bu = u * opts.boards;
-    const b = Math.floor(bu);
-    const local = bu - b;
-    // Each plank also has an end joint somewhere along its length.
-    const joint = Math.abs(((v + boardOffset[b]) % 1) - 0.5) < 0.0025;
-    const gap = local < 0.025 || local > 0.975 || joint;
-    // grain: stretched noise along the plank
-    // grain runs along the plank: lines across the board, gently wavy
-    const g = grain(u * 0.5 + b * 0.37, v * 2 + boardOffset[b]);
-    const lines = Math.sin((local * 16 + g * 2 + b) * Math.PI) * 0.5 + 0.5;
-    let k = 0;
-    for (const kn of knots) {
-      if (kn.b !== b) continue;
-      const d = Math.hypot((local - 0.5) / opts.boards, v - kn.v);
-      if (d < kn.r * 2.5) k = Math.max(k, 1 - d / (kn.r * 2.5));
-    }
-    const tone = boardTone[b] * (0.88 + lines * 0.1 + fine(u, v) * 0.08) * (1 - k * 0.45);
-    const w = opts.worn ? Math.max(0, wear(u, v) - 0.45) * 0.5 : 0;
-    const [r, gg, bl] = opts.base;
-    if (gap) return { r: r * 0.25, g: gg * 0.25, b: bl * 0.25, h: 0, rough: 0.9 };
-    return {
-      r: mix(r * tone, 200, w),
-      g: mix(gg * tone, 180, w),
-      b: mix(bl * tone, 150, w),
-      h: 0.55 + lines * 0.25 - k * 0.2,
-      rough: 0.62 + lines * 0.12 - w * 0.25,
-    };
-  });
-}
-
-/** Lime plaster: warm off-white, uneven, with damp stains near the floor. */
-function plaster(seed: number): Canvases {
-  const big = makeFbm(seed, 3, 4);
-  const small = makeFbm(seed + 11, 48, 3);
-  const cracks = makeFbm(seed + 23, 12, 3);
-  const crackMask = makeFbm(seed + 29, 2, 2);
-  return bake(2048, (u, v) => {
-    const n = big(u, v);
-    const s = small(u, v);
-    // hairline cracks, only in a few patches of the wall
-    const c = crackMask(u, v) > 0.62 && Math.abs(cracks(u, v) - 0.5) < 0.0022 ? 1 : 0;
-    const t = 0.86 + n * 0.12 + s * 0.06 - c * 0.07;
-    return { r: 228 * t, g: 208 * t, b: 172 * t, h: 0.5 + s * 0.4 - c * 0.4, rough: 0.92 };
-  });
-}
-
-/** Rough stone flags for the threshold and the hearth. */
-function stone(seed: number, size = 512): Canvases {
-  const n = makeFbm(seed, 6, 5);
-  const cellN = 5;
-  const rnd = makeRng(seed);
-  const pts = Array.from({ length: cellN * cellN }, (_, i) => ({ x: ((i % cellN) + 0.2 + rnd() * 0.6) / cellN, y: (Math.floor(i / cellN) + 0.2 + rnd() * 0.6) / cellN, t: 0.8 + rnd() * 0.3 }));
-  return bake(size, (u, v) => {
-    // Voronoi cells, wrapped so the texture tiles.
-    let d1 = 9;
-    let d2 = 9;
-    let tone = 1;
-    for (const p of pts) {
-      for (const ox of [-1, 0, 1]) {
-        for (const oy of [-1, 0, 1]) {
-          const d = Math.hypot(u - p.x - ox, v - p.y - oy);
-          if (d < d1) {
-            d2 = d1;
-            d1 = d;
-            tone = p.t;
-          } else if (d < d2) d2 = d;
-        }
-      }
-    }
-    const edge = d2 - d1 < 0.012;
-    const t = tone * (0.75 + n(u, v) * 0.4);
-    if (edge) return { r: 70, g: 66, b: 60, h: 0, rough: 1 };
-    return { r: 148 * t, g: 134 * t, b: 114 * t, h: 0.6 + n(u, v) * 0.4, rough: 0.85 };
-  });
-}
-
-/** Plain wood for furniture: quieter grain, no gaps. */
-function wood(seed: number, base: [number, number, number]): Canvases {
-  const grain = makeFbm(seed, 3, 4);
-  const fine = makeFbm(seed + 5, 80, 2);
-  return bake(1024, (u, v) => {
-    const g = grain(u * 0.6, v * 1.5);
-    const lines = Math.sin((u * 36 + g * 5) * Math.PI) * 0.5 + 0.5;
-    const t = 0.84 + lines * 0.07 + fine(u, v) * 0.06 + g * 0.1;
-    return { r: base[0] * t, g: base[1] * t, b: base[2] * t, h: 0.5 + lines * 0.3, rough: 0.55 + lines * 0.15 };
-  });
-}
-
 /** Coarse jute for the sacks. */
 function burlap(seed: number): Canvases {
   const n = makeFbm(seed, 4, 3);
@@ -200,6 +102,165 @@ function burlap(seed: number): Canvases {
   });
 }
 
+// ------------------------------------------------------------------ hand-painted style
+
+type RGB = [number, number, number];
+const lerp3 = (a: RGB, b: RGB, t: number): RGB => [mix(a[0], b[0], t), mix(a[1], b[1], t), mix(a[2], b[2], t)];
+/** Soft posterization: pulls a value towards a few bands, like paint applied in strokes. */
+const bands = (x: number, n: number, k = 0.55) => mix(x, Math.round(x * n) / n, k);
+const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+
+/**
+ * A four-stop color ramp: deep shadow (cool), shadow, base, highlight (warm).
+ * Shadows lean to violet and highlights to gold: the classic trick of
+ * painted game art, which keeps colors alive instead of greying them out.
+ */
+function ramp(stops: [RGB, RGB, RGB, RGB], t: number): RGB {
+  const x = clamp01(t) * 3;
+  const i = Math.min(2, Math.floor(x));
+  return lerp3(stops[i], stops[i + 1], x - i);
+}
+
+/** Painted floorboards: broad strokes along the grain, a dark line and a lit edge on every board. */
+function paintedPlanks(seed: number, opts: { boards: number; stops: [RGB, RGB, RGB, RGB]; size: number; worn?: boolean }): Canvases {
+  const streak = makeFbm(seed, 6, 4);
+  const blot = makeFbm(seed + 3, 2, 3);
+  const rnd = makeRng(seed);
+  const tone = Array.from({ length: opts.boards }, () => (rnd() - 0.5) * 0.22);
+  const offset = Array.from({ length: opts.boards }, () => rnd());
+  const knots = Array.from({ length: opts.boards }, (_, b) => ({ b, v: rnd(), r: 0.012 + rnd() * 0.012, on: rnd() < 0.6 }));
+  return bake(opts.size, (u, v) => {
+    const bu = u * opts.boards;
+    const b = Math.floor(bu);
+    const x = bu - b;
+    const jv = (v + offset[b]) % 1;
+    // streaks stretched along the board, then banded like brush strokes
+    const st = streak(u * 3 + b * 0.31, v * 0.35 + offset[b]);
+    let t = 0.55 + tone[b] + (st - 0.5) * 0.7;
+    t = bands(t, 5);
+    // painted lighting across the board: lit left edge, shaded right edge
+    t += x < 0.12 ? (0.12 - x) * 1.6 : 0;
+    t -= x > 0.8 ? (x - 0.8) * 1.2 : 0;
+    // knots: a dark painted swirl
+    const kn = knots[b];
+    if (kn.on) {
+      const d = Math.hypot((x - 0.5) * 0.6, (jv - kn.v) * opts.boards * 0.25);
+      if (d < kn.r * 6) t -= 0.35 * (1 - d / (kn.r * 6)) * (0.6 + 0.4 * Math.sin(d * 400));
+    }
+    if (opts.worn) t += Math.max(0, blot(u, v) - 0.55) * 0.6;
+    const edge = x < 0.03 || x > 0.985 || Math.abs(jv - 0.5) < 0.004;
+    if (edge) return { r: 38, g: 22, b: 18, h: 0, rough: 1 };
+    const [r, g, bl] = ramp(opts.stops, t);
+    return { r, g, b: bl, h: 0.6 + Math.min(x, 1 - x) * 0.8, rough: 0.92 };
+  });
+}
+
+/** Painted lime plaster: warm cream, soft blotches of peach and grey, visible brushwork. */
+function paintedPlaster(seed: number): Canvases {
+  const blot = makeFbm(seed, 3, 4);
+  const brush = makeFbm(seed + 9, 14, 3);
+  const cracks = makeFbm(seed + 23, 6, 3);
+  const mask = makeFbm(seed + 29, 2, 2);
+  const stops: [RGB, RGB, RGB, RGB] = [
+    [150, 128, 120],
+    [205, 182, 150],
+    [236, 218, 178],
+    [252, 238, 200],
+  ];
+  return bake(1024, (u, v) => {
+    let t = 0.62 + (blot(u, v) - 0.5) * 0.7 + (brush(u * 1.6 + v * 0.4, v) - 0.5) * 0.25;
+    t = bands(t, 6, 0.4);
+    const c = cracks(u, v);
+    const crack = mask(u, v) > 0.6 && Math.abs(c - 0.5) < 0.006;
+    const rim = mask(u, v) > 0.6 && Math.abs(c - 0.5) < 0.012 && c > 0.5;
+    if (crack) t = 0.15;
+    else if (rim) t += 0.15;
+    const [r, g, b] = ramp(stops, t);
+    return { r, g, b, h: 0.5 + brush(u, v) * 0.3 - (crack ? 0.4 : 0), rough: 0.95 };
+  });
+}
+
+/** Painted stones: each one lit from above, with a warm mortar between. */
+function paintedStone(seed: number, size: number, cells: number): Canvases {
+  const n = makeFbm(seed, 8, 3);
+  const rnd = makeRng(seed);
+  const palettes: [RGB, RGB, RGB, RGB][] = [
+    [[60, 58, 78], [112, 108, 120], [156, 150, 150], [206, 196, 176]],
+    [[70, 60, 66], [124, 112, 104], [170, 156, 134], [214, 200, 168]],
+    [[58, 64, 76], [100, 112, 118], [146, 156, 154], [196, 204, 190]],
+  ];
+  const pts = Array.from({ length: cells * cells }, (_, i) => ({
+    x: ((i % cells) + 0.2 + rnd() * 0.6) / cells,
+    y: (Math.floor(i / cells) + 0.2 + rnd() * 0.6) / cells,
+    p: palettes[Math.floor(rnd() * palettes.length)],
+    t: (rnd() - 0.5) * 0.25,
+  }));
+  return bake(size, (u, v) => {
+    let d1 = 9;
+    let d2 = 9;
+    let best = pts[0];
+    let dy = 0;
+    for (const p of pts) {
+      for (const ox of [-1, 0, 1]) {
+        for (const oy of [-1, 0, 1]) {
+          const d = Math.hypot(u - p.x - ox, (v - p.y - oy) * 1.3);
+          if (d < d1) {
+            d2 = d1;
+            d1 = d;
+            best = p;
+            dy = v - p.y - oy;
+          } else if (d < d2) d2 = d;
+        }
+      }
+    }
+    const gap = d2 - d1;
+    if (gap < 0.018) return { r: 74, g: 58, b: 48, h: 0, rough: 1 };
+    // light painted from above: top of each stone bright, bottom dark
+    let t = 0.55 + best.t - dy * cells * 0.9 + (n(u, v) - 0.5) * 0.3;
+    if (gap < 0.035) t -= 0.18; // darker rim near the mortar
+    t = bands(t, 4, 0.5);
+    const [r, g, b] = ramp(best.p, t);
+    return { r, g, b, h: clamp01(gap * 12), rough: 0.95 };
+  });
+}
+
+/** Painted furniture wood: long banded strokes, no gaps. */
+function paintedWood(seed: number, stops: [RGB, RGB, RGB, RGB]): Canvases {
+  const streak = makeFbm(seed, 5, 4);
+  const fine = makeFbm(seed + 2, 40, 2);
+  return bake(512, (u, v) => {
+    let t = 0.55 + (streak(u * 2.5, v * 0.4) - 0.5) * 0.8 + (fine(u * 3, v * 0.5) - 0.5) * 0.12;
+    t = bands(t, 5);
+    const [r, g, b] = ramp(stops, t);
+    return { r, g, b, h: 0.5 + (t - 0.5) * 0.5, rough: 0.9 };
+  });
+}
+
+const WOOD_DARK: [RGB, RGB, RGB, RGB] = [
+  [34, 20, 28],
+  [70, 40, 30],
+  [112, 66, 40],
+  [160, 104, 60],
+];
+const WOOD_MID: [RGB, RGB, RGB, RGB] = [
+  [52, 30, 34],
+  [104, 62, 38],
+  [150, 96, 54],
+  [204, 146, 84],
+];
+const WOOD_PALE: [RGB, RGB, RGB, RGB] = [
+  [80, 56, 52],
+  [150, 108, 70],
+  [196, 152, 98],
+  [236, 200, 140],
+];
+const FLOOR: [RGB, RGB, RGB, RGB] = [
+  [46, 26, 30],
+  [98, 56, 36],
+  [146, 92, 50],
+  [200, 140, 80],
+];
+
 /**
  * Every material of the shop, by name. Generating them takes seconds, so
  * they are baked once into image files (npm run bake) under
@@ -207,15 +268,15 @@ function burlap(seed: number): Canvases {
  * photographed material instead, replace the three files of a name.
  */
 export const RECIPES: Record<string, () => Canvases> = {
-  floor: () => planks(7, { base: [158, 100, 56], boards: 6, worn: true, size: 2048 }),
-  ceiling: () => planks(17, { base: [96, 66, 42], boards: 8 }),
-  plaster: () => plaster(3),
-  threshold: () => stone(5, 512),
-  plinth: () => stone(9, 1024),
-  woodDark: () => wood(31, [92, 62, 38]),
-  woodMid: () => wood(32, [128, 88, 52]),
-  woodPale: () => wood(33, [170, 130, 86]),
-  staves: () => wood(51, [120, 82, 48]),
+  floor: () => paintedPlanks(7, { boards: 5, stops: FLOOR, size: 1024, worn: true }),
+  ceiling: () => paintedPlanks(17, { boards: 6, stops: WOOD_DARK, size: 1024 }),
+  plaster: () => paintedPlaster(3),
+  threshold: () => paintedStone(5, 512, 4),
+  plinth: () => paintedStone(9, 1024, 6),
+  woodDark: () => paintedWood(31, WOOD_DARK),
+  woodMid: () => paintedWood(32, WOOD_MID),
+  woodPale: () => paintedWood(33, WOOD_PALE),
+  staves: () => paintedWood(51, WOOD_MID),
   burlap: () => burlap(41),
 };
 
@@ -266,10 +327,11 @@ export function writing(lines: string[], opts: { w: number; h: number; bg: strin
 
 export function material(set: TextureSet, opts: THREE.MeshStandardMaterialParameters & { bump?: number } = {}): THREE.MeshStandardMaterial {
   const { bump, ...rest } = opts;
+  // Painted surfaces carry their relief in the color: keep the bump subtle.
   return new THREE.MeshStandardMaterial({
     map: set.map,
     bumpMap: set.bumpMap,
-    bumpScale: bump ?? 1.5,
+    bumpScale: (bump ?? 1.5) * 0.4,
     roughnessMap: set.roughnessMap,
     roughness: 1,
     ...rest,

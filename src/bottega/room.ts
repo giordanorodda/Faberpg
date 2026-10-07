@@ -3,6 +3,7 @@ import { makeRng } from '../core/rng';
 import * as F from './fantasy';
 import * as P from './props';
 import { box, inspectable, MAT, shadowed } from './props';
+import { wonkify } from './style';
 import { material, texSet } from './textures';
 
 /** Room size in meters. The front wall (with door and window) faces south, towards +z. */
@@ -449,6 +450,7 @@ export function buildRoom(): Room {
   const jarF = F.fireflyJar();
   jarF.group.position.set(0.8, ctrTop, -1.32);
   jarF.group.scale.setScalar(0.8);
+  jarF.group.userData.noWonk = true; // the fireflies move: leave the jar as it is
   group.add(inspectable(jarF.group, 'lucciole'));
 
   const map = F.woodsMap();
@@ -468,6 +470,9 @@ export function buildRoom(): Room {
   const lan = F.lantern();
   lan.position.set(2.95, 0.72, 1.85);
   group.add(inspectable(lan, 'lanterna'));
+
+  // Everything a little crooked, as if built by hand.
+  wonkify(group);
 
   return {
     group,
