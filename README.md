@@ -45,6 +45,16 @@ Poi apri l'indirizzo che compare (di solito http://localhost:5173).
 
 Parametri utili nell'indirizzo: `?nuovo` ricomincia da capo, `?ora=19:30` porta il mondo a quell'ora.
 
+## Prova 3D in prima persona: la Bottega Bassi
+
+Un esperimento separato, per valutare l'aspetto grafico di un gioco in 3D con visuale libera: solo l'interno della bottega di Teresa, esplorabile in prima persona. Con `npm run dev` acceso, apri http://localhost:5173/bottega.html.
+
+- WASD per camminare, mouse per guardare, E per osservare le cose (il registro, il cartello, la bilancia...).
+- Tasti 1–5: alba, mattina, pomeriggio, tramonto, notte. La luce del sole entra dalle finestre e dalla porta; la sera si accendono la lucerna e la candela.
+- Tutto è costruito dal codice (Three.js): geometrie semplici e materiali procedurali, senza file di immagini. Con asset veri (texture fotografiche, modelli) il dettaglio salirebbe molto.
+
+Il codice è in `src/bottega/`, i testi da osservare in `src/data/bottega.ts`. Gli screenshot automatici: `npx tsx scripts/bottega-shot.ts`.
+
 ## Modificare il mondo
 
 I contenuti stanno in `src/data/`, separati dal codice, e si modificano come testo:
