@@ -482,3 +482,108 @@ export function calendar(): THREE.Group {
   g.add(nail);
   return shadowed(g);
 }
+
+/** A rush doormat, woven in a herringbone, one corner curling up. Lies flat. */
+export function doormat(w: number, d: number): THREE.Mesh {
+  const rr = makeRng(14);
+  const t = tex(256, 160, (g) => {
+    g.fillStyle = '#b8945a';
+    g.fillRect(0, 0, 256, 160);
+    for (let y = 0; y < 160; y += 10) {
+      for (let x = 0; x < 256; x += 10) {
+        g.strokeStyle = (x / 10 + y / 10) % 2 ? 'rgba(90,60,30,0.45)' : 'rgba(240,210,150,0.35)';
+        g.lineWidth = 3;
+        g.beginPath();
+        if ((y / 10) % 2) {
+          g.moveTo(x, y);
+          g.lineTo(x + 10, y + 10);
+        } else {
+          g.moveTo(x + 10, y);
+          g.lineTo(x, y + 10);
+        }
+        g.stroke();
+      }
+    }
+    g.strokeStyle = '#6a4a28';
+    g.lineWidth = 10;
+    g.strokeRect(0, 0, 256, 160);
+    // mud where boots are wiped
+    for (let i = 0; i < 40; i++) {
+      g.fillStyle = `rgba(70,50,30,${0.08 + rr() * 0.15})`;
+      g.beginPath();
+      g.ellipse(128 + (rr() - 0.5) * 140, 80 + (rr() - 0.5) * 70, 6 + rr() * 14, 3 + rr() * 6, rr() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+  });
+  const geo = new THREE.PlaneGeometry(w, d, 20, 12);
+  const p = geo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i) / (w / 2);
+    const y = p.getY(i) / (d / 2);
+    const k = Math.max(0, x - 0.6) * Math.max(0, y - 0.5);
+    p.setZ(i, k * k * 0.25 + 0.002);
+  }
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, toon({ map: t, rim: 0.15, side: THREE.DoubleSide }));
+  m.rotation.x = -Math.PI / 2;
+  m.receiveShadow = true;
+  m.castShadow = true;
+  m.userData.noWonk = true;
+  return m;
+}
+
+/** A pair of leather boots, mud drying on them, one fallen on its side. */
+export function boots(): THREE.Group {
+  const g = new THREE.Group();
+  const leather = toon({ color: 0x5a3a24, rim: 0.45 });
+  const mud = toon({ color: 0x4a3a2a, rim: 0.1 });
+  let seed = 1;
+  const boot = () => {
+    const b = new THREE.Group();
+    const leg = lathe([[0.04, 0], [0.045, 0.1], [0.042, 0.2], [0.048, 0.28], [0.044, 0.28]], leather, 16);
+    leg.scale.z = 0.85;
+    b.add(leg);
+    const foot = new THREE.Mesh(new THREE.CapsuleGeometry(0.042, 0.13, 6, 12), leather);
+    foot.rotation.x = Math.PI / 2;
+    foot.scale.y = 1;
+    foot.position.set(0, 0.04, 0.06);
+    b.add(foot);
+    const sole = rbox(0.09, 0.02, 0.25, mud, 0.008);
+    sole.position.set(0, 0.01, 0.06);
+    b.add(sole);
+    const caked = new THREE.Mesh(new THREE.CapsuleGeometry(0.044, 0.12, 4, 10, 1), mud);
+    caked.rotation.x = Math.PI / 2;
+    caked.scale.set(1.02, 1, 0.55);
+    caked.position.set(0, 0.025, 0.06);
+    b.add(caked);
+    // the top of the leg folds over a little
+    const fold = new THREE.Mesh(new THREE.TorusGeometry(0.046, 0.009, 6, 16), leather);
+    fold.rotation.x = Math.PI / 2;
+    fold.position.y = 0.27;
+    b.add(fold);
+    return organic(b, 0.04, seed++ * 3.7);
+  };
+  const a = boot();
+  a.position.set(-0.07, 0, 0);
+  a.rotation.y = 0.15;
+  g.add(a);
+  const b = boot();
+  b.rotation.set(0, -0.5, Math.PI / 2 - 0.15);
+  b.position.set(0.18, 0.045, 0.06);
+  g.add(b);
+  return shadowed(g);
+}
+
+/** A walking stick of chestnut, the handle worn pale. */
+export function walkingStick(): THREE.Group {
+  const g = new THREE.Group();
+  const stick = new THREE.Mesh(
+    new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.01, 0.4, 0.005), new THREE.Vector3(-0.005, 0.8, 0), new THREE.Vector3(0.005, 1.15, 0.004)]), 16, 0.014, 7),
+    toon({ color: 0x6a4a30, rim: 0.4 }),
+  );
+  g.add(stick);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.024, 10, 8), toon({ color: 0xa88a62, rim: 0.5 }));
+  knob.position.set(0.005, 1.16, 0.004);
+  g.add(knob);
+  return organic(shadowed(g), 0.05, 3);
+}

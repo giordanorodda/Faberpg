@@ -381,34 +381,123 @@ function ragRugTex(): THREE.CanvasTexture {
 /** Plates painted with a blue folk border, as from the market in town. */
 function plateTex(seed: number): THREE.CanvasTexture {
   return canvasTex(256, 256, (g) => {
-    const rnd = makeRng(seed);
-    g.fillStyle = '#f2e8d2';
+    const rnd = makeRng(seed * 7 + 2);
+    // each plate painted by hand, in one of the potters' colours
+    const ink = ['#3a5a9a', '#3a6a4a', '#9a6a2a', '#6a3a2a', '#2a4a7a'][Math.floor(rnd() * 5)];
+    const ground = ['#f2e8d2', '#efe2c4', '#f4ecdc'][Math.floor(rnd() * 3)];
+    g.fillStyle = ground;
     g.fillRect(0, 0, 256, 256);
-    g.strokeStyle = '#3a5a9a';
-    g.lineWidth = 7;
+    g.strokeStyle = ink;
+    g.fillStyle = ink;
+    g.lineCap = 'round';
+    // the rim: a band, a wave, or a ring of dots
+    const rim = Math.floor(rnd() * 3);
+    g.lineWidth = rim === 0 ? 9 : 3;
     g.beginPath();
     g.arc(128, 128, 116, 0, Math.PI * 2);
     g.stroke();
-    g.lineWidth = 2;
-    g.beginPath();
-    g.arc(128, 128, 92, 0, Math.PI * 2);
-    g.stroke();
-    g.fillStyle = '#3a5a9a';
-    const petals = 8 + Math.floor(rnd() * 5);
-    for (let i = 0; i < petals; i++) {
-      const a = (i / petals) * Math.PI * 2;
+    if (rim === 1) {
+      g.lineWidth = 3;
       g.beginPath();
-      g.ellipse(128 + Math.cos(a) * 104, 128 + Math.sin(a) * 104, 7, 4, a, 0, Math.PI * 2);
-      g.fill();
-    }
-    if (rnd() < 0.6) {
-      g.fillStyle = 'rgba(58,90,154,0.8)';
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * Math.PI * 2;
+      for (let a = 0; a <= Math.PI * 2 + 0.01; a += 0.05) {
+        const r = 104 + Math.sin(a * 16) * 5;
+        g.lineTo(128 + Math.cos(a) * r, 128 + Math.sin(a) * r);
+      }
+      g.stroke();
+    } else if (rim === 2) {
+      for (let i = 0; i < 28; i++) {
+        const a = (i / 28) * Math.PI * 2;
         g.beginPath();
-        g.ellipse(128 + Math.cos(a) * 22, 128 + Math.sin(a) * 22, 18, 9, a, 0, Math.PI * 2);
+        g.arc(128 + Math.cos(a) * 104, 128 + Math.sin(a) * 104, 3.5, 0, Math.PI * 2);
         g.fill();
       }
+    } else {
+      const petals = 8 + Math.floor(rnd() * 5);
+      for (let i = 0; i < petals; i++) {
+        const a = (i / petals) * Math.PI * 2;
+        g.beginPath();
+        g.ellipse(128 + Math.cos(a) * 102, 128 + Math.sin(a) * 102, 7, 4, a, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(128, 128, 86, 0, Math.PI * 2);
+    g.stroke();
+    // the middle: a flower, a bird, a rooster's tail, a star, or nothing
+    const motif = Math.floor(rnd() * 5);
+    g.lineWidth = 3;
+    if (motif === 0) {
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + rnd() * 0.2;
+        g.beginPath();
+        g.ellipse(128 + Math.cos(a) * 24, 128 + Math.sin(a) * 24, 20, 10, a, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.fillStyle = ground;
+      g.beginPath();
+      g.arc(128, 128, 8, 0, Math.PI * 2);
+      g.fill();
+    } else if (motif === 1) {
+      // a little bird on a branch, in a few strokes
+      g.beginPath();
+      g.ellipse(124, 120, 26, 16, -0.2, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.arc(150, 104, 11, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.moveTo(160, 104);
+      g.lineTo(172, 108);
+      g.stroke();
+      g.beginPath();
+      g.moveTo(100, 128);
+      g.lineTo(76, 112);
+      g.lineTo(80, 132);
+      g.fill();
+      g.beginPath();
+      g.moveTo(80, 150);
+      g.quadraticCurveTo(128, 140, 176, 154);
+      g.stroke();
+      for (const x of [100, 130, 158]) {
+        g.beginPath();
+        g.ellipse(x, 146 + (x % 3) * 2, 8, 4, 0.5, 0, Math.PI * 2);
+        g.fill();
+      }
+    } else if (motif === 2) {
+      for (let i = 0; i < 6; i++) {
+        g.beginPath();
+        g.moveTo(110, 160);
+        g.quadraticCurveTo(110 + i * 12, 80 - i * 4, 150 + i * 6, 70 + i * 10);
+        g.stroke();
+      }
+    } else if (motif === 3) {
+      g.beginPath();
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        const r = i % 2 ? 16 : 40;
+        g.lineTo(128 + Math.cos(a) * r, 128 + Math.sin(a) * r);
+      }
+      g.closePath();
+      g.fill();
+    }
+    // a chip in the rim on some, a hairline crack on one in five
+    if (rnd() < 0.3) {
+      const a = rnd() * Math.PI * 2;
+      g.fillStyle = '#c8b08a';
+      g.beginPath();
+      g.arc(128 + Math.cos(a) * 124, 128 + Math.sin(a) * 124, 8, 0, Math.PI * 2);
+      g.fill();
+    }
+    if (rnd() < 0.2) {
+      g.strokeStyle = 'rgba(90,70,50,0.6)';
+      g.lineWidth = 1;
+      g.beginPath();
+      let x = 128 + (rnd() - 0.5) * 100;
+      let y = 10;
+      g.moveTo(x, y);
+      for (let i = 0; i < 8; i++) g.lineTo((x += (rnd() - 0.5) * 20), (y += 10 + rnd() * 6));
+      g.stroke();
     }
   });
 }
@@ -896,10 +985,89 @@ export function table(w: number, d: number): THREE.Group {
   const apron = rbox(w - 0.2, 0.1, d - 0.2, M.beam, 0.01);
   apron.position.y = 0.67;
   g.add(apron);
-  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), M.beam);
-  knob.position.set(0.2, 0.67, d / 2 - 0.09);
-  g.add(knob);
-  return organic(shadowed(g), 0.006, 4);
+  // the drawer, left a hand's width open, spoons and string inside
+  const drawer = new THREE.Group();
+  const front = rbox(0.36, 0.08, 0.02, M.wood, 0.006);
+  front.position.z = 0.0;
+  drawer.add(front);
+  for (const x of [-0.17, 0.17]) {
+    const side = rbox(0.015, 0.06, 0.3, M.woodPale, 0.003);
+    side.position.set(x, -0.005, -0.15);
+    drawer.add(side);
+  }
+  const bottom = rbox(0.34, 0.01, 0.3, M.woodPale, 0.002);
+  bottom.position.set(0, -0.03, -0.15);
+  drawer.add(bottom);
+  for (let i = 0; i < 3; i++) {
+    const sp = rbox(0.15, 0.005, 0.014, M.iron, 0.002);
+    sp.position.set(-0.05 + i * 0.02, -0.02, -0.06 - i * 0.03);
+    sp.rotation.y = 0.2 + i * 0.3;
+    drawer.add(sp);
+  }
+  const twine = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.012, 6, 14), M.rope);
+  twine.rotation.x = Math.PI / 2;
+  twine.position.set(0.09, -0.015, -0.12);
+  drawer.add(twine);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), M.beam);
+  knob.position.set(0, 0, 0.018);
+  drawer.add(knob);
+  drawer.position.set(0.2, 0.67, d / 2 - 0.1 + 0.12);
+  g.add(drawer);
+  organic(g, 0.006, 4);
+  // a linen runner down the middle, laid by hand and never quite straight
+  const runner = new THREE.Mesh(new THREE.PlaneGeometry(w + 0.3, 0.34, 70, 16).rotateX(-Math.PI / 2), toon({ map: runnerTex(), rim: 0.25, side: THREE.DoubleSide }));
+  runner.position.set(0.03, 0.83, 0.02);
+  runner.rotation.y = 0.04;
+  settle(runner, { colliders: [boxCollider(new THREE.Vector3(-w / 2, 0.5, -d / 2), new THREE.Vector3(w / 2, 0.775, d / 2), 0.004), floorCollider()], bend: 0.08, steps: 300, friction: 0.85 });
+  g.add(runner);
+  return shadowed(g);
+}
+
+/** Linen with a band of red embroidery at each end and a little fringe. */
+function runnerTex(): THREE.CanvasTexture {
+  return canvasTex(512, 128, (c) => {
+    c.fillStyle = '#ece2cc';
+    c.fillRect(0, 0, 512, 128);
+    c.fillStyle = 'rgba(0,0,0,0.04)';
+    for (let i = 0; i < 512; i += 3) c.fillRect(i, 0, 1, 128);
+    for (const x0 of [24, 512 - 64]) {
+      c.strokeStyle = '#a8302a';
+      c.lineWidth = 2;
+      for (let y = 10; y < 118; y += 12) {
+        c.beginPath();
+        c.moveTo(x0, y);
+        c.lineTo(x0 + 10, y + 6);
+        c.lineTo(x0 + 20, y);
+        c.lineTo(x0 + 30, y + 6);
+        c.lineTo(x0 + 40, y);
+        c.stroke();
+      }
+      c.fillStyle = '#a8302a';
+      c.fillRect(x0 - 6, 0, 3, 128);
+      c.fillRect(x0 + 46, 0, 3, 128);
+    }
+    c.fillStyle = '#d8ccb0';
+    for (let y = 0; y < 128; y += 4) {
+      c.fillRect(0, y, 10, 2);
+      c.fillRect(502, y, 10, 2);
+    }
+  });
+}
+
+/** A chair in the bedroom with yesterday's shirt thrown over its back. */
+export function clothesChair(): THREE.Group {
+  const g = chair(5);
+  const shirt = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.95, 30, 50).rotateX(-Math.PI / 2), toon({ map: clothTex(64, '#c8b48a'), rim: 0.35, side: THREE.DoubleSide }));
+  shirt.position.set(0.02, 1.1, -0.1);
+  shirt.rotation.y = 0.12;
+  const colliders: Collider[] = [
+    boxCollider(new THREE.Vector3(-0.23, 0.42, -0.22), new THREE.Vector3(0.23, 0.48, 0.22), 0.008),
+    boxCollider(new THREE.Vector3(-0.23, 0.46, -0.27), new THREE.Vector3(0.23, 1.0, -0.19), 0.008),
+    floorCollider(),
+  ];
+  settle(shirt, { colliders, bend: 0.06, steps: 360, friction: 0.85 });
+  g.add(shirt);
+  return shadowed(g);
 }
 
 /** A small round table on three legs, by the armchair. */
@@ -965,7 +1133,8 @@ export function dresser(): THREE.Group {
     let i = 0;
     while (z < W / 2 - 0.12) {
       if (!(row === 1 && i === 2)) {
-        const mats = [toon({ map: plateTex(row * 10 + i), rim: 0.3 }), M.ceramic, M.ceramic];
+        const face = toon({ map: plateTex(row * 10 + i), rim: 0.3 });
+        const mats = [M.ceramic, face, face];
         const plate = new THREE.Mesh(plateGeo, mats);
         plate.rotation.set(0, 0, Math.PI / 2 - 0.22 - rnd() * 0.06);
         plate.position.set(0.09, y + 0.1, z);

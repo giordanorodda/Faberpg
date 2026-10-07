@@ -10,7 +10,30 @@ import type { WallOptions } from '../stile/paint';
 import { flushBookAtlas, makeBook } from './books';
 import * as De from './details';
 import * as Fu from './furniture';
-import { buildKitchen, KITCHEN_WINDOW } from './kitchen';
+import { buildKitchen, gatheredCurtain, KITCHEN_WINDOW } from './kitchen';
+
+/** Undyed linen with a band of blue stitching near the hem. */
+function curtainTex(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 256;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#efe6d4';
+  g.fillRect(0, 0, 128, 256);
+  g.fillStyle = 'rgba(0,0,0,0.035)';
+  for (let i = 0; i < 128; i += 3) g.fillRect(i, 0, 1, 256);
+  g.strokeStyle = '#4a6a9a';
+  g.lineWidth = 2;
+  for (const y of [222, 232]) {
+    g.beginPath();
+    for (let x = 0; x <= 128; x += 8) g.lineTo(x, y + (x % 16 ? 4 : 0));
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
 
 /**
  * The player's house: two floors under a steep roof. Downstairs the hearth,
@@ -403,6 +426,21 @@ export function buildHouse(): House {
     hookN.position.set(doorS.x1 + 0.32, 1.84, D / 2 - 0.02);
     group.add(hookN);
   }
+  // the doormat, the boots left by the door, the walking stick against the wall
+  {
+    const mat = De.doormat(0.85, 0.5);
+    mat.position.set((doorS.x0 + doorS.x1) / 2, 0.004, D / 2 - 0.4);
+    mat.rotation.z = 0.04;
+    group.add(tag(mat, 'zerbino'));
+    const bt = De.boots();
+    bt.position.set(doorS.x1 + 0.3, 0, D / 2 - 0.25);
+    bt.rotation.y = Math.PI + 0.3;
+    group.add(movable(tag(bt, 'stivali'), 'small'));
+    const stick = De.walkingStick();
+    stick.position.set(doorS.x0 - 0.22, 0, D / 2 - 0.08);
+    stick.rotation.set(0.1, 0, 0.05);
+    group.add(tag(stick, 'bastone'));
+  }
   // a cloak and a hat on the pegs by the door
   {
     const cloak = Fu.hangingCloak(61, '#4a5a3a');
@@ -685,6 +723,34 @@ export function buildHouse(): House {
     dr.rotation.y = Math.PI;
     group.add(tag(dr, 'piattaia'));
     box(W / 2 - 0.26, -0.95, 0.55, 1.2);
+    // on the dresser: a stack of bowls, the milk jug, the box of salt, a lantern for the cellar
+    {
+      const dt = 0.89;
+      const dx = W / 2 - 0.25;
+      for (let i = 0; i < 4; i++) {
+        const b = bowl(130 + i, i % 2 ? M.ceramic : M.ceramicBlue);
+        b.scale.setScalar(0.85 - i * 0.03);
+        b.position.set(dx + (rnd() - 0.5) * 0.02, dt + i * 0.035, -1.3);
+        group.add(b);
+      }
+      const mj = jug(131);
+      mj.scale.setScalar(0.8);
+      mj.position.set(dx - 0.05, dt, -1.0);
+      mj.rotation.y = 2.5;
+      group.add(movable(tag(mj, 'brocca'), 'small'));
+      const salt = rbox(0.16, 0.12, 0.12, M.woodPale, 0.01);
+      salt.position.set(dx, dt + 0.06, -0.72);
+      salt.rotation.y = 0.2;
+      group.add(movable(tag(shadowed(salt), 'sale'), 'small'));
+      const sl = rbox(0.17, 0.02, 0.13, M.wood, 0.006);
+      sl.position.set(dx - 0.01, dt + 0.13, -0.73);
+      sl.rotation.set(0, 0.2, 0.25);
+      group.add(shadowed(sl));
+      const ln = F.lantern();
+      toonify(ln);
+      ln.position.set(dx + 0.05, dt, -0.47);
+      group.add(movable(tag(ln, 'lanterna'), 'small'));
+    }
     const n = nail();
     n.rotation.y = -Math.PI / 2;
     n.position.set(W / 2 - 0.02, 2.05, 0.0);
@@ -780,6 +846,30 @@ export function buildHouse(): House {
     const rug = Fu.ragRug(0.75, 0.55);
     rug.position.set(-0.2, UP + 0.006, 0.5);
     group.add(rug);
+    // curtains at the gable window, on a rod, gathered to the sides
+    {
+      const rodY = winS2.y1 + 0.12;
+      const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.9, 8), M.beam);
+      rod.rotation.z = Math.PI / 2;
+      rod.position.set(0, rodY, D / 2 - 0.08);
+      group.add(shadowed(rod));
+      for (const s of [-1, 1]) {
+        const cu = gatheredCurtain(0.5, rodY - winS2.y0 + 0.05, curtainTex(), -(rodY - winS2.y0 + 0.02));
+        cu.position.set(s * 0.62, rodY - 0.02, D / 2 - 0.09);
+        cu.rotation.y = Math.PI;
+        group.add(tag(shadowed(cu), 'tende'));
+        for (let k = 0; k < 4; k++) {
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(0.02, 0.004, 4, 12), M.brass);
+          ring.position.set(s * (0.45 + k * 0.11), rodY, D / 2 - 0.08);
+          group.add(ring);
+        }
+      }
+    }
+    // a chair with yesterday's shirt on it
+    const cc = Fu.clothesChair();
+    cc.position.set(1.35, UP, 0.05);
+    cc.rotation.y = -Math.PI / 2 - 0.3;
+    group.add(movable(tag(cc, 'sedia'), 'furniture', box(1.35, 0.05, 0.5, 0.5, 1)));
     // a geranium on the sill of the gable window
     const pot = new THREE.Group();
     pot.add(new THREE.Mesh(new THREE.LatheGeometry([[0, 0], [0.07, 0], [0.09, 0.12], [0.1, 0.13], [0.1, 0.15], [0.085, 0.15]].map(([r, y]) => new THREE.Vector2(r, y)), 32), M.clay));

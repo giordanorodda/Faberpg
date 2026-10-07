@@ -43,7 +43,7 @@ function tex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void):
 }
 
 /** Red and white check, for curtains and jar caps. */
-const checkTex = (seed: number, col: string) =>
+export const checkTex = (seed: number, col: string) =>
   tex(128, 128, (g) => {
     const rnd = makeRng(seed);
     g.fillStyle = '#efe6d2';
@@ -68,7 +68,7 @@ const checkTex = (seed: number, col: string) =>
  * length is the full width of the fabric, its top held on the rod, and
  * gravity does the rest. Lies in XY facing +z, top edge at y = 0.
  */
-function gatheredCurtain(width: number, height: number, map: THREE.Texture, floorY: number): THREE.Mesh {
+export function gatheredCurtain(width: number, height: number, map: THREE.Texture, floorY: number): THREE.Mesh {
   const segX = Math.round(width * 70);
   const geo = new THREE.PlaneGeometry(width, height, segX, Math.round(height * 40));
   const p = geo.attributes.position as THREE.BufferAttribute;

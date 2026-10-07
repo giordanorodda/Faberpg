@@ -38,6 +38,10 @@ const shots: [string, string, number | 'sit' | 'read', number, number, number, n
   ['k2-madia', 'pomeriggio', -1.5, -1.45, 75, -32, 0],
   ['k3-acquaio', 'mattina', -1.75, -0.95, 15, -22, 0],
   ['k4-cucina-notte', 'notte', -0.7, 0.4, 50, -14, 0],
+  ['t1-tavolo', 'mattina', 0.5, 1.9, -60, -24, 0],
+  ['t2-piattaia', 'mattina', 1.6, -0.35, -90, -10, 0],
+  ['t3-ingresso', 'pomeriggio', 1.0, 0.9, 180, -22, 0],
+  ['t4-camera', 'mattina', 0.9, -0.9, 170, -10, UP],
   ['c10-libri', 'pomeriggio', -1.6, 1.75, 90, -14, 0],
 ];
 const only = process.env.SHOTS?.split(',');
