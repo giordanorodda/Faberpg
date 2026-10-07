@@ -13,6 +13,7 @@ import { Carry } from './carry';
 import { tickFlames } from './furniture';
 import { HouseMemory } from './memory';
 import { Reader } from './reader';
+import { HouseSound, type Surface } from './sound';
 import { buildHouse, HOUSE, roofAbove, STAIR, UP } from './house';
 
 /**
@@ -179,16 +180,24 @@ const hud = {
 };
 const controls = new PointerLockControls(camera, document.body);
 hud.intro.addEventListener('click', () => controls.lock());
-controls.addEventListener('lock', () => hud.intro.classList.add('hidden'));
+const sound = new HouseSound();
+controls.addEventListener('lock', () => {
+  hud.intro.classList.add('hidden');
+  sound.start();
+});
 controls.addEventListener('unlock', () => hud.intro.classList.remove('hidden'));
 
 const carry = new Carry(camera, house.group, house.colliders, (t) => say(t));
 document.addEventListener('mousedown', (e) => {
-  if (controls.isLocked && e.button === 0 && !seated) {
-    carry.use(floorY);
-    memory.touch();
-  }
+  if (controls.isLocked && e.button === 0 && !seated) useCarry();
 });
+function useCarry(): void {
+  const held = carry.held;
+  carry.use(floorY);
+  memory.touch();
+  // set down: a little knock when it lands
+  if (held && !carry.held) window.setTimeout(() => sound.thud(held.kind === 'furniture'), held.kind === 'furniture' ? 120 : 180);
+}
 // the mouse wheel turns what you hold, a little at a time
 document.addEventListener('wheel', (e) => {
   if (carry.held) carry.rotate(Math.sign(e.deltaY) * 0.13);
@@ -233,8 +242,14 @@ const keys = new Set<string>();
 window.addEventListener('keydown', (e) => {
   // while a book is open, or the shelf is, the keys belong to it
   if (reader.isOpen) {
-    if (e.code === 'KeyA' || e.code === 'ArrowLeft') reader.turn(-1);
-    if (e.code === 'KeyD' || e.code === 'ArrowRight') reader.turn(1);
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft') {
+      reader.turn(-1);
+      sound.page();
+    }
+    if (e.code === 'KeyD' || e.code === 'ArrowRight') {
+      reader.turn(1);
+      sound.page();
+    }
     if (e.code === 'KeyE') stopReading();
     return;
   }
@@ -250,10 +265,7 @@ window.addEventListener('keydown', (e) => {
     if (n >= 0 && n < PRESETS.length) applyPreset(n);
   }
   if (e.code === 'KeyE') interact();
-  if (e.code === 'KeyF' && !seated) {
-    carry.use(floorY);
-    memory.touch();
-  }
+  if (e.code === 'KeyF' && !seated) useCarry();
   if (e.code === 'KeyQ') carry.rotate(0.26);
   if (e.code === 'KeyR') carry.rotate(-0.26);
 });
@@ -283,6 +295,27 @@ function floorAt(x: number, z: number, y: number): number | null {
 
 let seated: { back: THREE.Vector3 } | null = null;
 let bobT = 0;
+let lastStair = -1;
+/** What is underfoot here: the stair, the hearthstone, a rug, or the boards. */
+function surfaceAt(x: number, z: number): Surface {
+  if (x < STAIR.x0 && x > STAIR.x1 && z < STAIR.z1) return 'stair';
+  if (floorY < 0.3) {
+    if (x < -HOUSE.w / 2 + 0.95 && Math.abs(z) < 0.8) return 'stone';
+    if (((x + 1.85) / 1.05) ** 2 + ((z - 0.6) / 0.8) ** 2 < 1) return 'rug';
+  } else if (((x + 0.2) / 0.75) ** 2 + ((z - 0.5) / 0.55) ** 2 < 1) return 'rug';
+  return 'wood';
+}
+function footstep(): void {
+  const s = surfaceAt(camera.position.x, camera.position.z);
+  sound.step(s);
+  if (s === 'stair') {
+    // the ninth stair creaks, every time, going up or down
+    const n = Math.round(UP / 0.19);
+    const i = Math.floor(((STAIR.x0 - camera.position.x) / (STAIR.x0 - STAIR.x1)) * n);
+    if (i === 8 && lastStair !== 8) sound.creak();
+    lastStair = i;
+  } else lastStair = -1;
+}
 function move(dt: number): void {
   const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   const s = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
@@ -317,7 +350,9 @@ function move(dt: number): void {
     camera.position.z += v.z;
     floorY = h;
   }
+  const before = Math.floor(bobT / Math.PI);
   bobT += dt * 7;
+  if (Math.floor(bobT / Math.PI) !== before) footstep();
   camera.position.y += (floorY + EYE + Math.sin(bobT) * 0.014 - camera.position.y) * Math.min(1, dt * 12);
 }
 
@@ -340,6 +375,7 @@ function interact(): void {
   if (fl) {
     fl.lit = !fl.lit;
     memory.touch();
+    sound.candle(fl.lit);
     say(fl.lit ? 'Accendi la candela. La fiamma esita, poi si raddrizza.' : 'Spegni la candela con due dita. Un filo di fumo, odore di sego.');
   } else if (key === 'poltrona' && !seated) {
     seated = { back: camera.position.clone() };
@@ -387,6 +423,14 @@ function frame(): void {
   }
   house.embers.emissiveIntensity = 1.0 + Math.sin(t * 2.3) * 0.25 + Math.sin(t * 5.7) * 0.1;
   house.cat.breathe(t);
+  {
+    const fireAt = flames.find((f) => f.def.kind === 'fire')!.light.position;
+    const df = camera.position.distanceTo(fireAt);
+    const fire = level === 1 ? 0.12 : Math.pow(Math.max(0, 1 - df / 7), 1.4);
+    const purr = Math.max(0, 1 - camera.position.distanceTo(house.cat.at) / 1.5);
+    sound.setScene(fire, p.night, purr);
+    sound.update();
+  }
   house.living.forEach((o, i) => {
     o.rotation.z = (Math.sin(t * 0.7 + i * 1.7) * 0.6 + Math.sin(t * 1.9 + i) * 0.3) * 0.012;
   });
@@ -462,4 +506,5 @@ requestAnimationFrame(frame);
   time: applyPreset,
   carry,
   house,
+  sound,
 };

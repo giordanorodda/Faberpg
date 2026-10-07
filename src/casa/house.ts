@@ -87,7 +87,7 @@ export interface House {
   lights: Light[];
   embers: THREE.MeshToonMaterial;
   living: THREE.Object3D[];
-  cat: { breathe: (t: number) => void };
+  cat: { breathe: (t: number) => void; at: THREE.Vector3 };
   /** Where the armchair seat is, and which way it faces (yaw). */
   seat: { at: THREE.Vector3; yaw: number };
   bedside: { at: THREE.Vector3; yaw: number };
@@ -787,7 +787,7 @@ export function buildHouse(): House {
   }
 
   // ------------------------------------------------------------ the bedroom
-  let cat: { breathe: (t: number) => void } = { breathe: () => {} };
+  let cat: { breathe: (t: number) => void; at: THREE.Vector3 } = { breathe: () => {}, at: new THREE.Vector3() };
   {
     const b = Fu.bed();
     b.group.position.set(-1.95, UP, 1.4);
@@ -801,7 +801,7 @@ export function buildHouse(): House {
     c.group.position.set(-1.45, hit ? hit.point.y - 0.03 : UP + 0.6, 1.62);
     c.group.rotation.y = 2.3;
     group.add(tag(c.group, 'gatto'));
-    cat = c;
+    cat = { breathe: c.breathe, at: c.group.position.clone() };
     const ch = Fu.chest();
     ch.position.set(-0.68, UP, 1.4);
     ch.rotation.y = 0.04;
