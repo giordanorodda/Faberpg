@@ -8,6 +8,7 @@ const out = process.argv[2] ?? 'screenshots';
 import { mkdirSync } from 'node:fs';
 mkdirSync(out, { recursive: true });
 const base = process.env.BASE_URL ?? 'http://localhost:5173/';
+const pageName = process.env.PAGE ?? 'bottega.html';
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => console.log('ERR', String(e)));
@@ -27,7 +28,7 @@ const only = process.env.SHOTS?.split(',');
 for (const [name, ora, x, z, yaw, pitch] of shots) {
   if (only && !only.includes(name)) continue;
   const t0 = Date.now();
-  await page.goto(`${base}bottega.html?ora=${ora}`, { waitUntil: 'domcontentloaded', timeout: 180000 });
+  await page.goto(`${base}${pageName}?ora=${ora}`, { waitUntil: 'domcontentloaded', timeout: 180000 });
   await page.waitForFunction(() => 'bottega' in window, null, { timeout: 180000 });
   console.log('loaded in', Date.now() - t0, 'ms');
   await page.waitForTimeout(Number(process.env.SHOT_WAIT ?? 8000)); // models and panoramas load asynchronously

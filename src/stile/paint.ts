@@ -108,8 +108,17 @@ export function woodTex(seed: number, base: string, line: string, opts: { planks
   }
   g.globalAlpha = 1;
   if (opts.planks) {
-    g.fillStyle = line;
-    for (let p = 0; p < opts.planks; p++) g.fillRect((p * 512) / opts.planks, 0, 4, 512);
+    // boards of slightly different widths and tones, never a perfect grid
+    let x = 0;
+    const avg = 512 / opts.planks;
+    while (x < 512) {
+      const w = avg * (0.75 + rnd() * 0.5);
+      g.fillStyle = rnd() < 0.5 ? `rgba(255,235,200,${rnd() * 0.12})` : `rgba(60,30,10,${rnd() * 0.12})`;
+      g.fillRect(x, 0, w, 512);
+      g.fillStyle = line;
+      g.fillRect(x, 0, 3 + rnd() * 2, 512);
+      x += w;
+    }
   }
   return finish(c);
 }
@@ -239,7 +248,7 @@ export function wallTex(seed: number, o: WallOptions): THREE.CanvasTexture {
   const rnd = makeRng(seed);
   const X = (m: number) => m * PX;
   const Y = (m: number) => H - m * PX; // canvas y grows downwards
-  g.fillStyle = '#ecd9b4';
+  g.fillStyle = '#f0d6a8';
   g.fillRect(0, 0, W, H);
   // warm and cool clouds in the limewash
   for (let i = 0; i < 90; i++) {

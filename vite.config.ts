@@ -9,6 +9,7 @@ export default defineConfig({
         main: resolve(import.meta.dirname, 'index.html'),
         bottega: resolve(import.meta.dirname, 'bottega.html'),
         stile: resolve(import.meta.dirname, 'stile.html'),
+        bottegaCartoon: resolve(import.meta.dirname, 'bottega-cartoon.html'),
       },
     },
   },

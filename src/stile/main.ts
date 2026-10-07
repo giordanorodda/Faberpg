@@ -9,6 +9,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeRng } from '../core/rng';
+import { barrelCollider, floorCollider, settle, wallCollider } from './softbody';
 import { clothTex, landscapeTex, plasterTex, tableclothTex, toon, wallTex, woodTex } from './paint';
 
 /**
@@ -48,6 +49,51 @@ const shadowed = <T extends THREE.Object3D>(o: T): T => {
 const lathe = (profile: [number, number][], mat: THREE.Material, seg = 48) =>
   new THREE.Mesh(new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), seg), mat);
 const rbox = (w: number, h: number, d: number, mat: THREE.Material, r = 0.02) => new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, r), mat);
+
+/**
+ * Nothing made by hand is perfectly round or straight: pushes every vertex
+ * a little in or out along its normal, with a smooth pattern unique to the
+ * object, scaled to its size. A few percent is enough to stop it looking
+ * like it came out of a mould.
+ */
+function organic<T extends THREE.Object3D>(obj: T, amount = 0.025, seed = 1): T {
+  obj.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    m.geometry = m.geometry.clone();
+    m.geometry.computeBoundingSphere();
+    const r = m.geometry.boundingSphere!.radius || 0.1;
+    const f = 2.4 / r;
+    const pos = m.geometry.attributes.position as THREE.BufferAttribute;
+    const nor = m.geometry.attributes.normal as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const z = pos.getZ(i);
+      const n = Math.sin(x * f + seed) * Math.sin(y * f * 1.3 + seed * 2) * Math.sin(z * f * 0.9 + seed * 3) + 0.4 * Math.sin(x * f * 2.7 + y * f * 1.9 + seed);
+      const d = n * r * amount;
+      pos.setXYZ(i, x + nor.getX(i) * d, y + nor.getY(i) * d, z + nor.getZ(i) * d);
+    }
+    m.geometry.computeVertexNormals();
+  });
+  return obj;
+}
+
+/** A long board or beam that bows and twists a little along its length (x). */
+function bentBox(w: number, h: number, d: number, mat: THREE.Material, sag: number, twist: number): THREE.Mesh {
+  const g = new THREE.BoxGeometry(w, h, d, Math.round(w * 20), 2, 2);
+  const p = g.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const t = x / w + 0.5;
+    const y = p.getY(i) - sag * Math.sin(t * Math.PI);
+    const a = twist * (t - 0.5);
+    const z = p.getZ(i);
+    p.setXYZ(i, x, y * Math.cos(a) - z * Math.sin(a), y * Math.sin(a) + z * Math.cos(a));
+  }
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, mat);
+}
 
 // ------------------------------------------------------------------ materials
 
@@ -90,11 +136,35 @@ const room = new THREE.Group();
 scene.add(room);
 const H = 2.6;
 const S = 3.2;
-M.floor.map!.repeat.set(2, 2);
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(S, S), M.floor);
-floor.rotation.x = -Math.PI / 2;
-floor.receiveShadow = true;
-room.add(floor);
+// The floor: separate boards of different widths and tones, a few of them
+// lifted or sunk by a couple of millimetres, dark gaps between them.
+{
+  const under = new THREE.Mesh(new THREE.PlaneGeometry(S, S), toon({ color: 0x3a2618, rim: 0 }));
+  under.rotation.x = -Math.PI / 2;
+  under.position.y = -0.006;
+  room.add(under);
+  const rnd = makeRng(71);
+  let x = -S / 2;
+  let k = 0;
+  while (x < S / 2) {
+    const w = Math.min(S / 2 - x, 0.22 + rnd() * 0.16);
+    const tone = new THREE.Color(0xffffff).multiplyScalar(0.86 + rnd() * 0.22);
+    tone.r *= 1 + (rnd() - 0.5) * 0.06;
+    const tex = woodTex(80 + k, '#b9875a', '#7a4f30', { knots: 1 + Math.floor(rnd() * 3) });
+    tex.center.set(0.5, 0.5);
+    tex.rotation = Math.PI / 2; // grain along the board
+    tex.repeat.set(S / 1.4, w / 0.5);
+    const mat = toon({ map: tex, color: tone.getHex(), rim: 0.1 });
+    const plank = bentBox(S, 0.03, w - 0.008, mat, (rnd() - 0.5) * 0.004, (rnd() - 0.5) * 0.01);
+    plank.rotation.y = Math.PI / 2;
+    plank.rotation.x = (rnd() - 0.5) * 0.004;
+    plank.position.set(x + w / 2, -0.015 + (rnd() - 0.5) * 0.004, 0);
+    plank.receiveShadow = true;
+    room.add(plank);
+    x += w;
+    k++;
+  }
+}
 
 // back wall
 const back = rbox(S, H, 0.25, M.plaster, 0.01);
@@ -121,7 +191,7 @@ function wallSkin(w: number, h: number, tex: THREE.Texture, seed: number): THREE
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i);
     const y = p.getY(i);
-    const bump = 0.008 * Math.sin(x * 3.1 + seed) * Math.sin(y * 2.7 + seed * 2) + 0.004 * Math.sin(x * 7.3 + y * 5.1 + seed);
+    const bump = 0.004 * Math.sin(x * 2.1 + seed) * Math.sin(y * 1.9 + seed * 2) + 0.0015 * Math.sin(x * 6.3 + y * 4.1 + seed);
     p.setZ(i, bump);
   }
   geo.computeVertexNormals();
@@ -160,7 +230,7 @@ ceil.receiveShadow = true;
 room.add(ceil);
 
 // beams: one along the back wall (for the nail), corner post
-const beam = rbox(S, 0.2, 0.18, M.beamH, 0.03);
+const beam = bentBox(S, 0.2, 0.18, M.beamH, 0.012, 0.03); // an old beam is never quite straight
 beam.position.set(0, 2.15, -S / 2 + 0.09);
 room.add(shadowed(beam));
 const post = rbox(0.2, H, 0.2, M.beam, 0.03);
@@ -197,6 +267,7 @@ for (const s of [-1, 1]) {
   hinge.rotation.y = s * -1.9;
   winFrame.add(hinge);
 }
+winFrame.rotation.x = 0.012; // the window sits slightly out of square
 room.add(shadowed(winFrame));
 // the landscape outside
 const outside = new THREE.Mesh(new THREE.PlaneGeometry(14, 7), new THREE.MeshBasicMaterial({ map: landscapeTex() }));
@@ -225,6 +296,7 @@ scene.add(outside);
   pot.add(new THREE.Mesh(mergeGeometries(dark), M.leafDark));
   pot.position.set(-S / 2 + 0.05, win.y0, fz + 0.12);
   pot.rotation.y = 0.4;
+  organic(pot, 0.02, 9);
   room.add(shadowed(pot));
   living.plant = pot;
 }
@@ -247,6 +319,7 @@ function barrel(): THREE.Group {
     const r = R(t) + 0.004;
     const hoop = lathe([[r, -0.022], [r + 0.012, -0.016], [r + 0.014, 0], [r + 0.012, 0.016], [r, 0.022]], M.iron, 56);
     hoop.position.y = t * h;
+    if (t < 0.9) hoop.rotation.set(Math.sin(t * 17) * 0.02, 0, Math.cos(t * 13) * 0.02);
     g.add(hoop);
   }
   // a bung and a little spill stain under it, small stories
@@ -258,7 +331,8 @@ function barrel(): THREE.Group {
 }
 const bar = barrel();
 bar.position.set(-0.95, 0, -1.0);
-bar.rotation.y = -0.4;
+bar.rotation.set(0.014, -0.4, -0.01);
+organic(bar, 0.012, 3);
 room.add(bar);
 
 // ------------------------------------------------------------------ sacks
@@ -267,7 +341,7 @@ room.add(bar);
  * A grain sack: wide flat-ish bottom, a full belly that sags, a neck
  * gathered by a rope, and the cloth above it flaring open in soft folds.
  */
-function sack(seed: number, mat: THREE.Material, slump: number): THREE.Group {
+function sack(seed: number, mat: THREE.Material, slump: number, untied = false): THREE.Group {
   const rnd = makeRng(seed);
   const g = new THREE.Group();
   const prof: [number, number][] = [
@@ -297,6 +371,7 @@ function sack(seed: number, mat: THREE.Material, slump: number): THREE.Group {
   geo.computeVertexNormals();
   const body = new THREE.Mesh(geo, mat);
   g.add(body);
+  if (untied) return shadowed(g);
   // the rope: a few turns around the neck, and a dangling end with a knot
   for (let k = 0; k < 3; k++) {
     const turn = new THREE.Mesh(new THREE.TorusGeometry(0.072 + k * 0.002, 0.009, 8, 32), M.rope);
@@ -335,7 +410,7 @@ room.add(s2);
 // ------------------------------------------------------------------ shelf with bottles
 
 const shelf = new THREE.Group();
-const board = rbox(1.2, 0.05, 0.28, M.woodH, 0.015);
+const board = bentBox(1.2, 0.05, 0.28, M.woodH, 0.005, 0.0); // bowed a little under the weight
 shelf.add(board);
 for (const x of [-0.45, 0.45]) {
   // a curled wrought-iron bracket
@@ -384,6 +459,7 @@ const shelfSpots: [number, number][] = [
   [0.36, -1.54], // ...of the clear bottle, half hidden behind it
 ];
 bottles.forEach(([b], i) => {
+  organic(b, 0.015, 10 + i);
   b.position.set(shelfSpots[i][0], shelfTop, shelfSpots[i][1]);
   b.rotation.y = i * 1.3;
   room.add(b);
@@ -405,6 +481,7 @@ bottles.forEach(([b], i) => {
   str.rotation.x = Math.PI / 2;
   str.position.y = 0.128;
   jar.add(str);
+  organic(jar, 0.02, 5);
   jar.position.set(0.53, shelfTop + 0.075, -1.47); // sits on the folded cloths
   jar.rotation.y = 0.7;
   room.add(shadowed(jar));
@@ -416,6 +493,7 @@ bottles.forEach(([b], i) => {
   handle.rotation.z = -Math.PI / 2;
   handle.position.set(0.085, 0.13, 0);
   jug.add(handle);
+  organic(jug, 0.03, 6);
   jug.position.set(0.79, shelfTop, -1.42); // pushed almost to the edge
   jug.rotation.y = 2.1;
   room.add(shadowed(jug));
@@ -528,44 +606,20 @@ const MC = {
 };
 const barrelTop = new THREE.Vector3(-0.95, 0.92, -1.0);
 
-// The tablecloth: a square of checked cotton on a round barrel. It lies a
-// little rumpled on top, then falls following the barrel's belly; its four
-// corners hang lowest, the folds gather under them, the hem waves.
+// The tablecloth: a square of checked cotton dropped onto the barrel and
+// left to fall. The folds are not drawn: they come from the cloth settling.
+const barrelRadius = (y: number) => 0.3 + Math.sin(Math.max(0, Math.min(1, y / 0.92)) * Math.PI) * 0.06;
 {
-  const h = 0.92;
-  const R = (y: number) => 0.3 + Math.sin(Math.max(0, Math.min(1, y / h)) * Math.PI) * 0.06; // barrel radius at height y
-  const size = 0.98;
-  const geo = new THREE.PlaneGeometry(size, size, 90, 90);
+  const geo = new THREE.PlaneGeometry(0.98, 0.98, 64, 64);
   geo.rotateX(-Math.PI / 2);
-  geo.rotateY(0.5); // corners not lined up with anything
-  const p = geo.attributes.position as THREE.BufferAttribute;
-  const off = new THREE.Vector2(0.06, 0.03);
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i) + off.x;
-    const z = p.getZ(i) + off.y;
-    const r = Math.hypot(x, z);
-    const a = Math.atan2(z, x);
-    const top = R(h) + 0.006;
-    if (r <= top - 0.02) {
-      // gentle rumples on top
-      p.setXYZ(i, x, 0.008 + 0.006 * Math.sin(x * 23 + 1) * Math.sin(z * 19) + 0.004 * Math.sin((x + z) * 41), z);
-      continue;
-    }
-    // over the rim and down the side
-    const over = r - (top - 0.02);
-    const y = 0.008 - over * 0.98;
-    // folds: broad ones gathered towards the corners, finer ones in between, growing as the cloth falls
-    const cornerA = Math.cos((a - 0.5) * 4); // 1 under a corner
-    const fold = (0.022 * Math.sin(a * 9 + Math.sin(a * 3) * 1.5) + 0.012 * Math.sin(a * 17 + 2)) * Math.min(1, over * 5) * (0.7 + 0.5 * cornerA);
-    // clear of the iron hoops (they stand 2 cm proud of the staves)
-    const rr = R(h + y) + 0.026 + Math.max(0, fold) + Math.max(0, cornerA) * over * 0.08;
-    // the hem waves a little
-    const hem = over > 0.2 ? 0.01 * Math.sin(a * 12) : 0;
-    p.setXYZ(i, Math.cos(a) * rr, y + hem, Math.sin(a) * rr);
-  }
-  geo.computeVertexNormals();
   const cloth = new THREE.Mesh(geo, toon({ map: tableclothTex(), rim: 0.2, side: THREE.DoubleSide }));
-  cloth.position.copy(barrelTop);
+  cloth.position.set(barrelTop.x + 0.06, barrelTop.y + 0.06, barrelTop.z + 0.03);
+  cloth.rotation.set(0.04, 0.5, -0.03); // thrown, not laid: a little askew
+  settle(cloth, {
+    colliders: [barrelCollider(new THREE.Vector3(-0.95, 0, -1.0), 0.92, barrelRadius, 0.05), floorCollider(), wallCollider('z', -S / 2 + 0.02)],
+    bend: 0.06,
+    steps: 420,
+  });
   room.add(shadowed(cloth));
 }
 
@@ -588,11 +642,14 @@ function apple(green = false): THREE.Mesh {
 }
 {
   const bowl = lathe([[0, 0], [0.06, 0.002], [0.11, 0.03], [0.13, 0.06], [0.125, 0.065], [0.105, 0.035], [0.05, 0.012], [0, 0.012]], M.wood, 40);
+  organic(bowl, 0.04, 7);
   bowl.position.copy(barrelTop).add(new THREE.Vector3(-0.06, 0.018, 0.04));
+  bowl.rotation.set(0.03, 0.8, -0.02);
   room.add(shadowed(bowl));
   const spots: [number, number, number, boolean][] = [[-0.03, 0.05, 0.0, false], [0.03, 0.05, 0.03, true], [0.0, 0.05, -0.04, false], [0.01, 0.09, 0.0, false]];
   for (const [x, y, z, gr] of spots) {
     const a = apple(gr);
+    a.scale.setScalar(0.85 + ((x * 100 + z * 37) % 1 + 1) % 1 * 0.3);
     a.position.copy(bowl.position).add(new THREE.Vector3(x, y, z));
     a.rotation.set(x * 20, z * 30, y * 10);
     room.add(shadowed(a));
@@ -605,26 +662,85 @@ function apple(green = false): THREE.Mesh {
 
 // the sack that tipped over, grain spilled across the boards, the scoop left in it
 {
-  const fallen = sack(13, M.sack2, 0.1);
-  fallen.rotation.set(0, 0.7, Math.PI / 2 - 0.12);
-  fallen.position.set(0.35, 0.24, -0.95);
+  // Untied and knocked over: a bag three-quarters full of grain, left to
+  // slump on the boards under its own weight, mouth open and flattened.
+  const fallen = sack(13, M.sack2, 0.1, true);
+  fallen.rotation.set(0.08, 2.36, Math.PI / 2 - 0.2); // mouth towards the room
+  fallen.position.set(0.35, 0.3, -0.95);
   fallen.scale.setScalar(0.8);
   room.add(fallen);
-  const mound = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 12), MC.grain);
-  mound.scale.set(1.3, 0.22, 1);
-  mound.position.set(0.72, 0, -0.62);
-  room.add(shadowed(mound));
+  const body = fallen.children[0] as THREE.Mesh;
+  const rimIdx: number[] = [];
+  const bp = body.geometry.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < bp.count; i++) if (bp.getY(i) > 0.66) rimIdx.push(i);
+  settle(body, {
+    colliders: [floorCollider(), wallCollider('z', -S / 2 + 0.03), wallCollider('x', -S / 2 + 0.03)],
+    volume: 0.6,
+    bend: 0.15,
+    steps: 420,
+    friction: 0.8,
+  });
+  // Where the grain went: out of the mouth of the sack, in a fan that
+  // thins out, piled in a few lumpy heaps near the sack, with stray grains
+  // further away. No circles, no ellipses.
+  fallen.updateMatrixWorld(true);
+  const mouth = new THREE.Vector3();
+  for (const i of rimIdx) mouth.add(body.localToWorld(new THREE.Vector3().fromBufferAttribute(bp, i)));
+  mouth.divideScalar(Math.max(1, rimIdx.length));
+  const base = body.localToWorld(new THREE.Vector3(0, 0.2, 0));
+  const flow = new THREE.Vector2(mouth.x - base.x, mouth.z - base.z).normalize();
+  const side = new THREE.Vector2(-flow.y, flow.x);
   const rnd = makeRng(31);
-  const N = 420;
+  const at = (along: number, across: number) => new THREE.Vector2(mouth.x + flow.x * along + side.x * across, mouth.z + flow.y * along + side.y * across);
+  // heaps: lumpy, flattened, overlapping
+  const heaps: { c: THREE.Vector2; r: number; h: number }[] = [];
+  for (let i = 0; i < 5; i++) {
+    const along = 0.02 + i * 0.07 + rnd() * 0.05;
+    heaps.push({ c: at(along, (rnd() - 0.5) * 0.12 * (1 + i * 0.4)), r: 0.11 - i * 0.015 + rnd() * 0.03, h: 0.05 - i * 0.008 });
+  }
+  const heapHeight = (x: number, z: number) => {
+    let hgt = 0;
+    for (const hp of heaps) {
+      const d = Math.hypot(x - hp.c.x, z - hp.c.y) / hp.r;
+      if (d < 1) hgt = Math.max(hgt, hp.h * (1 - d * d) * (0.85 + 0.15 * Math.sin(x * 60) * Math.sin(z * 53)));
+    }
+    return hgt;
+  };
+  for (const hp of heaps) {
+    const g = new THREE.SphereGeometry(1, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2);
+    const p = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      const z = p.getZ(i);
+      const ang = Math.atan2(z, x);
+      const rr = 1 + 0.22 * Math.sin(ang * 3 + hp.c.x * 40) + 0.12 * Math.sin(ang * 7 + hp.c.y * 30); // ragged outline
+      p.setXYZ(i, x * hp.r * rr, p.getY(i) * hp.h, z * hp.r * rr * 0.85);
+    }
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, MC.grain);
+    m.position.set(hp.c.x, -0.004, hp.c.y);
+    m.rotation.y = rnd() * Math.PI;
+    room.add(shadowed(m));
+  }
+  // grains: dense near the mouth, a fan that widens and thins, some strays
+  const N = 1100;
   const grains = new THREE.InstancedMesh(new THREE.SphereGeometry(0.006, 6, 4), MC.grain, N);
   const m4 = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
   for (let i = 0; i < N; i++) {
-    const a = rnd() * Math.PI * 2;
-    const r = 0.1 + Math.pow(rnd(), 1.8) * 0.5;
-    m4.makeRotationY(rnd() * 3).setPosition(0.72 + Math.cos(a) * r * 1.3, 0.004, -0.62 + Math.sin(a) * r);
-    m4.scale(new THREE.Vector3(1.3, 0.8, 1));
+    const stray = rnd() < 0.08;
+    const along = stray ? 0.1 + rnd() * 0.75 : Math.pow(rnd(), 1.6) * 0.55;
+    const width = 0.04 + along * 0.55;
+    // grains bunch into little drifts across the fan
+    const across = (rnd() - 0.5) * width * (stray ? 2.2 : 1) + Math.sin(along * 25) * 0.025;
+    const pt = at(along, across);
+    const y = heapHeight(pt.x, pt.y) + 0.004;
+    q.setFromEuler(new THREE.Euler(rnd() * 3, rnd() * 3, rnd() * 3));
+    const sz = 0.8 + rnd() * 0.5;
+    m4.compose(new THREE.Vector3(pt.x, y, pt.y), q, new THREE.Vector3(1.4 * sz, 0.75 * sz, 0.9 * sz));
     grains.setMatrixAt(i, m4);
   }
+  grains.castShadow = false;
   grains.receiveShadow = true;
   room.add(grains);
   const scoop = new THREE.Group();
@@ -635,8 +751,11 @@ function apple(green = false): THREE.Mesh {
   const handle = rbox(0.16, 0.022, 0.03, M.woodH, 0.01);
   handle.position.set(0.12, 0.01, 0);
   scoop.add(handle);
-  scoop.position.set(0.68, 0.05, -0.55);
-  scoop.rotation.set(0.15, 2.4, 0.2);
+  // the scoop lies half buried in the first heap
+  const sp = heaps[1].c;
+  scoop.position.set(sp.x, 0.035, sp.y);
+  scoop.rotation.set(0.25, 2.1, 0.18);
+  organic(scoop, 0.03, 12);
   room.add(shadowed(scoop));
 }
 
@@ -659,6 +778,7 @@ function apple(green = false): THREE.Mesh {
   lying.rotation.y = 0.2;
   room.add(lying);
   const cupM = lathe([[0, 0], [0.035, 0.002], [0.04, 0.06], [0.042, 0.07], [0.038, 0.07], [0.034, 0.008], [0, 0.008]], MC.cup, 32);
+  organic(cupM, 0.04, 8);
   cupM.position.set(-0.27, shelfTop, -1.37);
   cupM.rotation.y = 1.1;
   room.add(shadowed(cupM));
@@ -749,22 +869,36 @@ function apple(green = false): THREE.Mesh {
   room.add(shadowed(broom));
 }
 
-// stray bits of straw on the floor
+// straw: in clumps where things stand (by the broom, under the sacks), a few stray bits elsewhere
 {
   const rnd = makeRng(41);
-  const N = 70;
-  const straws = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.0025, 0.0025, 1, 4), MC.straw, N);
+  const clumps: [number, number, number, number][] = [
+    // x, z, radius, count
+    [-1.32, 0.62, 0.12, 40],
+    [-0.45, -0.75, 0.18, 30],
+    [-0.2, -1.25, 0.14, 22],
+    [0.2, -0.5, 0.3, 14],
+  ];
+  const total = clumps.reduce((n, c) => n + c[3], 0) + 16;
+  const straws = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.0022, 0.0022, 1, 4), MC.straw, total);
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
-  for (let i = 0; i < N; i++) {
-    const len = 0.04 + rnd() * 0.1;
-    q.setFromEuler(new THREE.Euler(Math.PI / 2, rnd() * Math.PI, 0));
-    const near = rnd() < 0.6;
-    const x = near ? -1.0 + rnd() * 1.4 : -1.5 + rnd() * 2.5;
-    const z = near ? -1.3 + rnd() * 1.0 : -1.4 + rnd() * 2.4;
-    m4.compose(new THREE.Vector3(x, 0.003, z), q, new THREE.Vector3(1, len, 1));
-    straws.setMatrixAt(i, m4);
+  let k = 0;
+  const put = (x: number, z: number) => {
+    const len = 0.03 + rnd() * 0.11;
+    // most lie flat, a few rest on others at a slight angle
+    q.setFromEuler(new THREE.Euler(Math.PI / 2 + (rnd() < 0.2 ? (rnd() - 0.5) * 0.4 : 0), rnd() * Math.PI, 0));
+    m4.compose(new THREE.Vector3(x, 0.003 + rnd() * 0.004, z), q, new THREE.Vector3(1, len, 1));
+    straws.setMatrixAt(k++, m4);
+  };
+  for (const [cx, cz, r, n] of clumps) {
+    for (let i = 0; i < n; i++) {
+      const a = rnd() * Math.PI * 2;
+      const d = Math.pow(rnd(), 1.5) * r;
+      put(cx + Math.cos(a) * d * 1.3, cz + Math.sin(a) * d);
+    }
   }
+  for (let i = 0; i < 16; i++) put(-1.4 + rnd() * 2.6, -1.4 + rnd() * 2.6);
   straws.receiveShadow = true;
   room.add(straws);
 }
@@ -782,7 +916,7 @@ for (const k of ['left', 'bottom'] as const) sun.shadow.camera[k] = -2.6;
 for (const k of ['right', 'top'] as const) sun.shadow.camera[k] = 2.6;
 sun.shadow.bias = -0.0005;
 sun.shadow.normalBias = 0.02;
-sun.shadow.radius = 8;
+sun.shadow.radius = 3; // soft, but small objects still draw their shadow
 scene.add(sun, sun.target);
 // sky light: the shadows take its blue, the classic painted look
 scene.add(new THREE.HemisphereLight(0xa8c8ff, 0xd8a870, 1.1));
@@ -843,8 +977,8 @@ scene.add(dust);
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, { samples: 4, type: THREE.HalfFloatType }));
 composer.addPass(new RenderPass(scene, camera));
 const gtao = new GTAOPass(scene, camera, window.innerWidth, window.innerHeight);
-gtao.updateGtaoMaterial({ radius: 0.25, thickness: 1, samples: 16 });
-gtao.blendIntensity = 0.5; // soft contact shadows, nothing heavier
+gtao.updateGtaoMaterial({ radius: 0.3, thickness: 1, samples: 16 });
+gtao.blendIntensity = 0.85; // where things touch, a soft shadow: nothing floats
 composer.addPass(gtao);
 composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.15, 0.5, 0.9));
 composer.addPass(new OutputPass());

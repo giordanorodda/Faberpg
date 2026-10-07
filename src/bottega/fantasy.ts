@@ -36,7 +36,8 @@ export function leadedGlass(w: number, h: number): THREE.Mesh {
   return m;
 }
 
-const TIMBER = MAT.darkWood;
+/** Read at use time: the cartoon shop swaps the materials before building. */
+const timber = () => MAT.darkWood;
 
 /**
  * Exposed timber frame on the inner face of a wall: posts, a rail above a
@@ -66,7 +67,7 @@ export function timberFrame(length: number, height: number, openings: { x0: numb
     for (const o of [...stops, { x0: length / 2, x1: length / 2, y0: 0, y1: 0 }]) {
       const end = o.x0 - 0.04;
       if (end - x > 0.05) {
-        const r = box(end - x, 0.14, 0.1, TIMBER, 1.5);
+        const r = box(end - x, 0.14, 0.1, timber(), 1.5);
         r.position.set((x + end) / 2, y, 0.06);
         add(r);
       }
@@ -80,7 +81,7 @@ export function timberFrame(length: number, height: number, openings: { x0: numb
   for (const o of openings) posts.push(o.x0 - 0.08, o.x1 + 0.08);
   for (const x of posts) {
     if (!free(x, 0.9, height - 0.4) && !openings.some((o) => Math.abs(x - (o.x0 - 0.08)) < 0.01 || Math.abs(x - (o.x1 + 0.08)) < 0.01)) continue;
-    const p = box(0.14, height - 0.9, 0.1, TIMBER, 1.5);
+    const p = box(0.14, height - 0.9, 0.1, timber(), 1.5);
     p.position.set(x, 0.9 + (height - 0.9) / 2 - 0.16, 0.06);
     add(p);
   }
@@ -93,7 +94,7 @@ export function timberFrame(length: number, height: number, openings: { x0: numb
     const y0 = 0.93;
     const y1 = height - 0.39;
     const len = Math.hypot(b - a - 0.14, y1 - y0);
-    const br = box(0.12, len, 0.08, TIMBER, 1.5);
+    const br = box(0.12, len, 0.08, timber(), 1.5);
     br.position.set((a + b) / 2, (y0 + y1) / 2, 0.05);
     br.rotation.z = (i % 2 ? 1 : -1) * Math.atan2(b - a - 0.14, y1 - y0);
     add(br);
