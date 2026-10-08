@@ -15,6 +15,8 @@ export class WorldClock {
   private startMinutes: number;
   /** For testing: a fixed time of day (minutes since midnight) instead of the running clock. */
   override: number | null = null;
+  /** For testing: a fixed day (days since the world began). */
+  dayOverride: number | null = null;
 
   constructor() {
     const loaded = loadFrom(localStorage);
@@ -32,9 +34,9 @@ export class WorldClock {
   /** Game minutes since the world began. */
   minutes(): number {
     const m = this.startMinutes + ((Date.now() - this.startReal) / 60000) * this.speed;
-    if (this.override === null) return m;
-    const day = Math.floor(m / 1440);
-    return day * 1440 + this.override;
+    if (this.override === null && this.dayOverride === null) return m;
+    const day = this.dayOverride ?? Math.floor(m / 1440);
+    return day * 1440 + (this.override ?? m % 1440);
   }
 
   calendar(): Calendar {

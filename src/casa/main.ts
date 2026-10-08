@@ -13,11 +13,14 @@ import { ANNEX, ANNEX_DOOR, ANNEX_USES, type AnnexUse } from './annex';
 import { Carry } from './carry';
 import { applyDecor, CURTAINS, DEFAULT_DECOR, QUILTS, RUGS, WALLS, type DecorState } from './decor';
 import { tickFlames } from './furniture';
-import { Rain, rainyToday, Steam } from './living';
+import { Rain, Steam } from './living';
 import { HouseMemory } from './memory';
 import { Reader } from './reader';
 import { HouseSound, type Surface } from './sound';
 import { buildHouse, HOUSE, roofAbove, STAIR, UP } from './house';
+import { WorldClock } from '../interni/clock';
+import { PeopleMemory } from '../interni/memory';
+import { BUILDINGS } from '../data/map';
 
 /**
  * The player's house, walked in first person. Two floors joined by a stair;
@@ -116,7 +119,9 @@ const PRESETS: Preset[] = [
   { name: 'Notte', az: 165, el: 30, sun: 0.8, sunColor: 0x8aa4e0, sky: 0.22, skyColor: 0x3a4a8a, groundColor: 0x1a1a2a, top: 0x070c22, horizon: 0x1a2650, stars: 1, clouds: 0, glow: 0, night: true, exposure: 1.0 },
 ];
 let preset = 1;
-let raining = new URLSearchParams(location.search).get('meteo') === 'pioggia' || (new URLSearchParams(location.search).get('meteo') !== 'sereno' && rainyToday());
+// the same clock and weather as the village outside
+const clock = new WorldClock();
+let raining = new URLSearchParams(location.search).get('meteo') === 'pioggia' || (new URLSearchParams(location.search).get('meteo') !== 'sereno' && clock.weather() === 'rain');
 let current: Preset;
 const dirOf = (az: number, el: number) => {
   const a = THREE.MathUtils.degToRad(az);
@@ -591,6 +596,10 @@ function interact(forced?: string): void {
     else if (!progress.keys) say('Una porta chiusa a chiave, in fondo alle scale. Nessuna delle chiavi che usi ogni giorno la apre.');
     else {
       progress.annex = 'open';
+      // the village gets to know (Ysolde knew that room)
+      const people = new PeopleMemory();
+      people.set('stanza_aperta');
+      people.save();
       memory.touch();
       sound.creak();
       say('La quarta chiave gira, dopo un po\' di insistenza. La porta si apre su una stanza che nessuno apre da anni.');
@@ -619,6 +628,8 @@ function interact(forced?: string): void {
     say('Apri la cassapanca. Coperte, un maglione, e in fondo una cassetta di legno: gli attrezzi di chi abitava qui. Martello, chiodi, una sega piccola. Li prendi.');
   } else if (key === 'gatto') {
     say(house.cat.spot.line);
+  } else if (key === 'porta') {
+    goOut();
   } else say(CASA_INSPECT[key] ?? '');
   lastKey = key;
 }
@@ -733,9 +744,26 @@ function frame(): void {
   requestAnimationFrame(frame);
 }
 
+/** Out of the front door, back into the village, on the step outside. */
+function goOut(): void {
+  let t = 0;
+  const step = () => {
+    t += 1 / 30;
+    grade.uniforms.fade.value = Math.min(1, t / 0.6);
+    if (t < 0.7) requestAnimationFrame(step);
+    else {
+      memory.save();
+      const door = BUILDINGS.find((b) => b.id === 'player')!.door;
+      clock.save({ x: door.x, y: door.y + 1 });
+      location.href = 'index.html';
+    }
+  };
+  requestAnimationFrame(step);
+}
+
 const params = new URLSearchParams(location.search);
 const byName = PRESETS.findIndex((q) => q.name.toLowerCase() === (params.get('ora') ?? '').toLowerCase());
-const hour = new Date().getHours();
+const hour = Math.floor(clock.minuteOfDay() / 60);
 applyPreset(byName >= 0 ? byName : hour < 7 ? 0 : hour < 13 ? 1 : hour < 18 ? 2 : hour < 21 ? 3 : 4);
 // the cat starts the day where the hour says
 house.cat.set(house.catSpots[['ciotola', 'panca', 'letto', 'poltrona', 'tappeto'][preset]]);

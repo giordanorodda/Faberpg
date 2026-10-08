@@ -300,6 +300,11 @@ export class Person {
     book.visible = false;
     this.props.book = book;
     this.root.add(book);
+    // a blanket pulled up to the chest, for the night
+    const blanket = rbox(0.62 * s, 0.1 * s, 1.15 * s, toon({ color: 0x8a5a4a, rim: 0.25 }), 0.045 * s);
+    blanket.visible = false;
+    this.props.blanket = organic(shadowed(blanket), 0.04, 5);
+    this.root.add(blanket);
     const pen = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.004, 0.16, 5), toon({ color: 0xe8e0d0 }));
     pen.visible = false;
     this.props.pen = pen;
@@ -412,6 +417,11 @@ export class Person {
   /** Sets the height of the seat for sitting poses. */
   setSeat(h: number): void {
     this.seatH = h;
+  }
+
+  /** Puts the body in its pose at once, without easing (when someone is placed rather than arriving). */
+  settle(): void {
+    this.update(1, 0, 0);
   }
 
   /** Changes what the person is doing; the body eases into it. */
@@ -553,8 +563,12 @@ export class Person {
     this.j.hips.g.position.y = 0.92 * s + this.hipLift;
     this.body.rotation.x = this.bodyTilt;
     // lying down, the whole body rests on the bed (seat height = top of the mattress)
+    // (the body turns about the feet: slide it back so the hips stay where the person is)
     const lie = Math.min(1, this.bodyTilt / (-Math.PI / 2));
     this.body.position.y = lie * (this.seatH + 0.12 * s);
+    this.body.position.z = lie * 0.92 * s;
+    this.props.blanket.visible = lie > 0.9;
+    this.props.blanket.position.set(0, this.seatH + 0.14 * s, 0.38 * s);
     // things in hand
     this.props.book.visible = p === 'sitRead';
     if (p === 'sitRead') {

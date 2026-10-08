@@ -20,6 +20,7 @@ import { PeopleMemory } from './memory';
 import { Npc, type Nav } from './npc';
 import type { Box } from './shell';
 import { TalkUi } from './ui';
+import { BUILDINGS } from '../data/map';
 
 /**
  * A house you can walk into from the village, with the people who live
@@ -50,6 +51,12 @@ export interface PlaceDef {
   build(): Built;
   people: Character[];
   inspect: Record<string, string>;
+}
+
+/** The village tile just outside a building's door, where you appear on leaving. */
+export function outsideOf(building: string): { x: number; y: number } {
+  const b = BUILDINGS.find((x) => x.id === building);
+  return b ? { x: b.door.x, y: b.door.y + 1 } : { x: 10, y: 29 };
 }
 
 export function runPlace(def: PlaceDef): void {
@@ -230,7 +237,7 @@ export function runPlace(def: PlaceDef): void {
   const momentOf = (n: Npc) => ({ phase: clock.calendar().phase, weather: clock.weather(), doing: n.doing, day: clock.calendar().day });
   function startTalk(n: Npc): void {
     if (n.person.pose === 'sleep') {
-      say(`${n.c.name.split(' ')[0]} dorme. Meglio non svegliarla${n.c.id === 'corvino' ? '… lo' : ''}.`.replace('svegliarla… lo', 'svegliarlo'));
+      say(`${n.c.name.split(' ')[0]} dorme. Meglio non ${n.c.id === 'corvino' ? 'svegliarlo' : 'svegliarla'}.`);
       return;
     }
     n.talking = true;
@@ -437,6 +444,7 @@ export function runPlace(def: PlaceDef): void {
   const timer = new THREE.Timer();
   let crossT = 0;
   let hudT = 0;
+  let shadowT = 0;
   function frame(): void {
     timer.update();
     const dt = Math.min(0.05, timer.getDelta());
@@ -456,7 +464,16 @@ export function runPlace(def: PlaceDef): void {
       for (const m of f.def.flames) m.visible = lit;
       const flick = 1 + Math.sin(t * 9.3 + f.def.at.x) * 0.06 + Math.sin(t * 23.1 + f.def.at.z) * 0.04 + (fire ? Math.sin(t * 3.7) * 0.08 : 0);
       f.light.intensity = lit ? (fire ? (p.night ? 3 : 1.4) : 1.3) * flick : 0;
-      f.light.castShadow = lit;
+    }
+    // shadows from the fire and the two nearest candles only: a room full of
+    // shadow-casting flames would bring a modest computer to its knees
+    shadowT -= dt;
+    if (shadowT < 0) {
+      shadowT = 0.5;
+      const lit = flames.filter((f) => f.light.intensity > 0);
+      const candles = lit.filter((f) => f.def.kind === 'candle').sort((a, b) => a.light.position.distanceToSquared(camera.position) - b.light.position.distanceToSquared(camera.position));
+      const casting = new Set([...lit.filter((f) => f.def.kind === 'fire'), ...candles.slice(0, 2)]);
+      for (const f of flames) f.light.castShadow = casting.has(f);
     }
     grade.uniforms.night.value += ((p.night ? 1 : 0) - grade.uniforms.night.value) * Math.min(1, dt * 2);
     const now = nowOf();
@@ -515,6 +532,17 @@ export function runPlace(def: PlaceDef): void {
     time(i: number) {
       clock.override = PRESET_TIMES[i];
       for (const n of npcs) n.snap(nowOf());
+    },
+    /** Any minute of the day, and optionally a weekday (0 Monday … 6 Sunday). */
+    at(minute: number, weekday?: number) {
+      clock.override = minute;
+      if (weekday !== undefined) {
+        clock.dayOverride = null;
+        const cal = clock.calendar();
+        clock.dayOverride = cal.day + ((weekday - cal.weekday + 7) % 7);
+      }
+      for (const n of npcs) n.snap(nowOf());
+      return npcs.map((n) => ({ id: n.c.id, present: n.present, spot: n.spotId, doing: n.doing }));
     },
     talk(id: string) {
       const n = npcs.find((x) => x.c.id === id);

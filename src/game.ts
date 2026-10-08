@@ -53,6 +53,7 @@ export class Game {
   private lastRegion: string | null = null;
   private lastBuilding: string | null = null;
   private lastBump = 0;
+  private leaving = false;
   private autosaveTimer = 0;
   private time = 0;
   private weatherCache = new Map<number, DayWeather>();
@@ -284,6 +285,9 @@ export class Game {
       this.state.player.facing = facing;
       const from = this.playerTile;
       const to = { x: from.x + DIR[facing].x, y: from.y + DIR[facing].y };
+      // a door with a lived-in inside: going in means going into the 3D house
+      const inside = facing === 'up' && this.world.tile(to.x, to.y) === '+' ? this.world.buildingAt(to.x, to.y) : undefined;
+      if (inside?.page) return this.enterPage(inside.page, from);
       if (this.canStep(from, to)) this.target = to;
       else {
         this.walkTime = 0;
@@ -317,6 +321,19 @@ export class Game {
 
   private npcAt(p: Point): NpcActor | undefined {
     return this.npcs.find((n) => (n.tileX === p.x && n.tileY === p.y) || (n.path[0] && n.path[0].x === p.x && n.path[0].y === p.y));
+  }
+
+  /** Leaves the village for a 3D interior; on the way out, the house puts you back on `outside`. */
+  private enterPage(page: string, outside: Point): void {
+    if (this.leaving) return;
+    this.leaving = true;
+    this.px = outside.x;
+    this.py = outside.y;
+    this.target = null;
+    this.state.player.facing = 'down';
+    this.save();
+    this.ui.setFade(true);
+    window.setTimeout(() => (location.href = page), 350);
   }
 
   /** Walking into something: a closed door or the edge of the known world says so, gently. */

@@ -6,7 +6,7 @@
  *   npm run app        build, then open the app
  *   npm run app:mac    build a double-clickable app in release/
  */
-const { app, BrowserWindow, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, safeStorage, shell } = require('electron');
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -30,7 +30,7 @@ function serve() {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
       const url = decodeURIComponent((req.url || '/').split('?')[0]);
-      const file = path.normalize(path.join(ROOT, url === '/' ? 'casa.html' : url));
+      const file = path.normalize(path.join(ROOT, url === '/' ? 'index.html' : url));
       if (!file.startsWith(ROOT)) {
         res.writeHead(403).end();
         return;
@@ -44,10 +44,43 @@ function serve() {
         res.end(data);
       });
     });
-    // only this computer can reach it
-    server.listen(0, '127.0.0.1', () => resolve(server.address().port));
+    // only this computer can reach it. Always the same port if possible: the
+    // saved world lives in the page's storage, which belongs to the address
+    server.once('error', () => server.listen(0, '127.0.0.1'));
+    server.on('listening', () => resolve(server.address().port));
+    server.listen(47213, '127.0.0.1');
   });
 }
+
+// ------------------------------------------------------------------ talking with the villagers
+// The key is kept in the user's app folder, encrypted with the system keychain
+// when there is one; ANTHROPIC_API_KEY in the environment works too.
+const keyFile = () => path.join(app.getPath('userData'), 'chiave.bin');
+function readKey() {
+  try {
+    const data = fs.readFileSync(keyFile());
+    return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(data) : data.toString('utf8');
+  } catch {
+    return process.env.ANTHROPIC_API_KEY || '';
+  }
+}
+ipcMain.handle('faber:hasKey', () => !!readKey());
+ipcMain.handle('faber:setKey', (_e, key) => {
+  const text = String(key).trim();
+  const data = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(text) : Buffer.from(text, 'utf8');
+  fs.writeFileSync(keyFile(), data, { mode: 0o600 });
+});
+ipcMain.handle('faber:chat', async (e, id, req) => {
+  const sdk = require('@anthropic-ai/sdk');
+  const Anthropic = sdk.default || sdk.Anthropic;
+  const client = new Anthropic({ apiKey: readKey() });
+  const stream = client.beta.messages.stream(req);
+  stream.on('text', (text) => {
+    if (!e.sender.isDestroyed()) e.sender.send('faber:text', id, text);
+  });
+  const final = await stream.finalMessage();
+  return { content: final.content, stop_reason: final.stop_reason };
+});
 
 async function main() {
   const port = await serve();
@@ -57,7 +90,7 @@ async function main() {
     height: 900,
     backgroundColor: '#000000',
     title: 'Un piccolo mondo in cui abitare',
-    webPreferences: { contextIsolation: true, sandbox: true },
+    webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
   });
   const go = (page) => win.loadURL(base + page);
   const template = [
@@ -65,9 +98,12 @@ async function main() {
     {
       label: 'Luoghi',
       submenu: [
-        { label: 'La casa', accelerator: 'CmdOrCtrl+1', click: () => go('casa.html') },
-        { label: 'La bottega', accelerator: 'CmdOrCtrl+2', click: () => go('bottega-cartoon.html') },
-        { label: 'Il villaggio (2D)', accelerator: 'CmdOrCtrl+3', click: () => go('index.html') },
+        { label: 'Il villaggio (2D)', accelerator: 'CmdOrCtrl+1', click: () => go('index.html') },
+        { label: 'La casa', accelerator: 'CmdOrCtrl+2', click: () => go('casa.html') },
+        { label: 'La Casa delle Erbe (Ysolde)', accelerator: 'CmdOrCtrl+3', click: () => go('erbe.html') },
+        { label: 'La casa del Cartografo (Corvino)', accelerator: 'CmdOrCtrl+4', click: () => go('cartografo.html') },
+        { type: 'separator' },
+        { label: 'La bottega (prova)', click: () => go('bottega-cartoon.html') },
       ],
     },
     {
@@ -81,7 +117,7 @@ async function main() {
     void shell.openExternal(url);
     return { action: 'deny' };
   });
-  go('casa.html');
+  go('index.html');
 }
 
 app.whenReady().then(main);

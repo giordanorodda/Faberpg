@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { inRange, parseClock } from '../core/time';
-import type { WeatherKind } from '../core/weather';
 import { LOOKS } from './looks';
 import { Person } from './person';
-import type { Character, Routine, Spot } from './types';
+import { whereIs, type Nav, type Now } from './routine';
+import type { Character, Spot } from './types';
+
+export { whereIs, type Nav, type Now };
 
 /**
  * Someone living their day in a house: where they should be follows from
@@ -11,32 +12,6 @@ import type { Character, Routine, Spot } from './types';
  * there along the paths of the room. When you talk to them they stop and
  * turn to you; when you are near, they mutter about their work.
  */
-
-export interface Nav {
-  nodes: Record<string, [number, number]>;
-  edges: [string, string][];
-}
-
-export interface Now {
-  minute: number;
-  weekday: number;
-  weather: WeatherKind;
-}
-
-/** Where someone is right now: the routine line that wins, and which house and spot it names. */
-export function whereIs(c: Character, now: Now): { house: string; spot: string; doing: string } {
-  let hit: Routine | null = null;
-  for (const r of c.routine) {
-    const to = r.to === '24:00' ? 1440 : parseClock(r.to);
-    if (!inRange(now.minute, parseClock(r.from), to)) continue;
-    if (r.days && !r.days.includes(now.weekday)) continue;
-    if (r.weather && !r.weather.includes(now.weather)) continue;
-    hit = r;
-  }
-  const r = hit ?? c.routine[0];
-  const [house, spot] = r.spot.includes(':') ? r.spot.split(':') : [c.house, r.spot];
-  return { house, spot, doing: r.doing };
-}
 
 function path(nav: Nav, from: THREE.Vector2, to: THREE.Vector2): THREE.Vector2[] {
   const ids = Object.keys(nav.nodes);
@@ -113,7 +88,13 @@ export class Npc {
     this.spotId = this.present ? w.spot : null;
     this.route = [];
     this.leaving = false;
-    if (this.present) this.placeAt(this.spots[w.spot]);
+    if (this.present) {
+      this.placeAt(this.spots[w.spot]);
+      this.person.root.position.set(this.pos.x, 0, this.pos.y);
+      this.person.root.rotation.y = this.yaw;
+      this.person.root.updateMatrixWorld(true);
+      this.person.settle();
+    }
     this.person.root.visible = this.present;
   }
 

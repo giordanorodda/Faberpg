@@ -13,7 +13,7 @@
     "shot": "tsx scripts/screenshot.ts",
     "bake": "tsx scripts/bake-textures.ts",
     "app": "npm run build && electron .",
-    "app:mac": "npm run build && electron-builder --mac --dir"
+    "app:mac": "npm run build && electron-builder --mac zip --publish never"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
@@ -44,7 +44,10 @@
     ],
     "mac": {
       "category": "public.app-category.role-playing-games",
-      "target": "dir"
+      "target": [
+        "zip"
+      ],
+      "identity": null
     },
     "win": {
       "target": "dir"

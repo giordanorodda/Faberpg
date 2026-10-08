@@ -20,6 +20,8 @@ export interface BuildingDef {
   /** 'always': the player's own home; 'hours': open during `hours`; 'locked': someone else's home. */
   access: 'always' | 'hours' | 'locked';
   hours?: TimeRange[];
+  /** A 3D interior to walk into (an HTML page next to index.html). */
+  page?: string;
 }
 
 export interface RegionDef {
