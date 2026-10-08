@@ -30,7 +30,7 @@ const shots: Shot[] = [
   ['k1-carto-mattina', 'cartografo', 600, 1, -1.8, 1.9, -20, -12],
   ['k2-carto-mappe', 'cartografo', 640, 1, 0.3, 0.0, -10, -16],
   ['k3-carto-cannocchiale', 'cartografo', 1080, 1, 1.0, 0.8, 110, -6],
-  ['k4-carto-domenica', 'cartografo', 960, 6, 0.9, 0.9, -70, -14],
+  ['k4-carto-domenica', 'cartografo', 960, 6, 1.0, 1.0, 75, -14],
   ['k5-carto-notte', 'cartografo', 1320, 1, -1.2, 1.8, -30, -12],
   ['k6-carto-parla', 'cartografo', 900, 1, -1.9, 0.3, 80, -10, 'corvino'],
 ];

@@ -301,7 +301,7 @@ export class Person {
     this.props.book = book;
     this.root.add(book);
     // a blanket pulled up to the chest, for the night
-    const blanket = rbox(0.62 * s, 0.1 * s, 1.15 * s, toon({ color: 0x8a5a4a, rim: 0.25 }), 0.045 * s);
+    const blanket = rbox(0.64 * s, 0.12 * s, 1.4 * s, toon({ color: 0x8a5a4a, rim: 0.25 }), 0.045 * s);
     blanket.visible = false;
     this.props.blanket = organic(shadowed(blanket), 0.04, 5);
     this.root.add(blanket);
@@ -529,12 +529,13 @@ export class Person {
       this.target('elbowL', -0.7);
       this.target('elbowR', -0.9);
     } else if (p === 'sleep') {
-      // lying on the back, hands folded on the chest
+      // lying on the back
       this.bodyTiltTgt = -Math.PI / 2;
-      this.target('shoulderL', -0.4, 0, 0.35);
-      this.target('shoulderR', -0.4, 0, -0.35);
-      this.target('elbowL', -1.9);
-      this.target('elbowR', -1.9);
+      // arms along the body, under the blanket
+      this.target('shoulderL', -0.05, 0, -0.06);
+      this.target('shoulderR', -0.05, 0, 0.06);
+      this.target('elbowL', -0.25);
+      this.target('elbowR', -0.25);
       this.target('neck', -0.15);
     }
     // the head turns towards whoever is near, within what a neck can do
@@ -568,7 +569,7 @@ export class Person {
     this.body.position.y = lie * (this.seatH + 0.12 * s);
     this.body.position.z = lie * 0.92 * s;
     this.props.blanket.visible = lie > 0.9;
-    this.props.blanket.position.set(0, this.seatH + 0.14 * s, 0.38 * s);
+    this.props.blanket.position.set(0, this.seatH + 0.13 * s, 0.25 * s);
     // things in hand
     this.props.book.visible = p === 'sitRead';
     if (p === 'sitRead') {
