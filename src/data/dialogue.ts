@@ -251,4 +251,29 @@ export const DIALOGUE: Record<string, DialogueLine[]> = {
     { when: { minFam: 3, flag: 'heard_ruins' }, text: ['Le rovine. Gliele ha messe in testa Bruna.', 'O le aveva già, e Bruna le ha soltanto chiamate per nome.'], once: true },
     { text: ['(Clelia ti saluta con un cenno, senza smettere di fare quello che sta facendo.)'] },
   ],
+
+  enrico: [
+    {
+      when: { first: true },
+      text: ['Enrico Di Bella. Pensionante, scrivano, quel che serve.', 'Scrivo lettere per chi non ha tempo, o non ha parole. Tu ne hai, di tempo?'],
+      sets: ['met_enrico'],
+      note: 'Enrico Di Bella abita all\'osteria e scrive lettere per chi non ha tempo, o parole.',
+    },
+    { when: { at: ['tavern'], activity: ['work'] }, text: ['La prima riga è la più difficile. Dopo si va giù da soli, come le scale.', 'Poi si inciampa.'] },
+    { when: { at: ['tavern'], activity: ['work'], phase: ['dawn', 'morning'] }, text: ['Il tavolo in fondo prende la luce fino alle undici.', 'Poi le parole diventano più lente, o sono io.'] },
+    { when: { at: ['tavern'], phase: ['evening', 'night'] }, text: ['Martino la sera la conta a teste. Io a storie.', 'Stasera due e mezza. La mezza non ha ancora un finale.'] },
+    { when: { at: ['square_bench2'] }, text: ['Si pensa meglio sulla panca che alla scrivania. La scrivania ha sempre qualcosa da fare.'] },
+    { when: { at: ['stagno'] }, text: ['Pietro racconta la stessa storia due volte, e la seconda è diversa.', 'Dovrei prendere appunti. Ma poi non sarebbe più vera.'] },
+    { when: { weather: ['rain'] }, text: ['La pioggia scrive da sola. Io correggo.'] },
+    { when: { playerHas: 'pesce' }, text: ['Un pesce! Ecco una cosa che non si può scrivere: bisogna averla in mano.'] },
+    {
+      when: { minFam: 2 },
+      text: ['Le lettere di Teresa alla figlia le scrivo io.', 'Lei detta come fa i conti: senza una virgola di troppo.', 'Poi mi fa aggiungere "stammi bene". Una volta sola, in fondo.'],
+      once: true,
+      note: 'Enrico scrive per Teresa le lettere alla figlia in città. Teresa detta come fa i conti.',
+    },
+    { when: { flag: 'heard_key', minFam: 1 }, text: ['La chiave di Pietro. Ci ho provato un racconto: una chiave, tutte le porte del paese, e dietro niente.', 'Mi è venuto bene solo il titolo.'], once: true },
+    { text: ['Se ti serve una parola, chiedimi. Se ti serve quella giusta, dammi tempo.'] },
+    { text: ['(Enrico annuisce senza alzare la penna.)'] },
+  ],
 };

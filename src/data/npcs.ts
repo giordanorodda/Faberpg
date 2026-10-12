@@ -1,7 +1,7 @@
 import type { NpcDef } from '../npc/types';
 
 /**
- * Gli abitanti di Acquaferma (prima vertical slice: 10 persone).
+ * Gli abitanti di Acquaferma (prima vertical slice: 11 persone).
  *
  * Routine: per ogni momento vale l'ULTIMA riga che corrisponde.
  * Prima si scrive la giornata normale, poi le eccezioni (pioggia, domenica...).
@@ -236,5 +236,31 @@ export const NPCS: NpcDef[] = [
       { from: '21:30', to: '24:00', at: 'monti_bed2', activity: 'sleep' },
       { from: '09:00', to: '12:00', at: 'monti_loom', activity: 'work', weather: ['rain'] },
     ],
+  },
+  {
+    id: 'enrico',
+    name: 'Enrico Di Bella',
+    age: 46,
+    role: 'scrivano, pensionante dell\'osteria',
+    home: 'tavern',
+    look: { skin: '#dcb08e', hair: '#3a2e26', shirt: '#4a4f66', legs: '#2f2f38', hairStyle: 'short', beard: true },
+    traits: ['ironico', 'ascolta più di quanto parli', 'corregge le virgole degli altri a mente'],
+    likes: ['la prima riga di una lettera', 'i racconti ripetuti due volte', 'la carta buona', 'tirare tardi'],
+    dislikes: ['le lettere senza risposta', 'chi dice "insomma" per chiudere un discorso'],
+    family: {},
+    schedule: [
+      { from: '00:00', to: '07:30', at: 'enrico_bed', activity: 'sleep' },
+      { from: '07:30', to: '08:30', at: 'tavern_corner', activity: 'eat' },
+      { from: '08:30', to: '12:30', at: 'tavern_corner', activity: 'work' },
+      { from: '12:30', to: '13:30', at: 'tavern_corner', activity: 'eat' },
+      { from: '13:30', to: '16:00', at: 'tavern_corner', activity: 'work' },
+      { from: '16:00', to: '18:30', at: 'square_bench2', activity: 'rest' },
+      { from: '18:30', to: '19:30', at: 'tavern_corner', activity: 'eat' },
+      { from: '19:30', to: '23:30', at: 'tavern_seat5', activity: 'chat' },
+      { from: '23:30', to: '24:00', at: 'enrico_bed', activity: 'sleep' },
+      { from: '10:00', to: '12:00', at: 'dock_end', activity: 'walk', days: [6], weather: ['clear', 'cloudy'] },
+      { from: '16:00', to: '18:30', at: 'tavern_corner', activity: 'work', weather: ['rain'] },
+    ],
+    notes: 'BOZZA: il carattere è un segnaposto, da riscrivere con l\'autore. Fa lo scrivano per chi non ha tempo o parole (le lettere di Teresa alla figlia in città, per esempio).',
   },
 ];
